@@ -4,3 +4,5 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+blocks = { path = "../blocks" }
+libm = "0.2"

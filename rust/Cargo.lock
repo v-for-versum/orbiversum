@@ -16,6 +16,10 @@ dependencies = [
 [[package]]
 name = "dsp"
 version = "0.1.0"
+dependencies = [
+ "blocks",
+ "libm",
+]
 
 [[package]]
 name = "libm"
