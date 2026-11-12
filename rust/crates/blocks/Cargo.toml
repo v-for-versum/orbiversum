@@ -1,0 +1,6 @@
+[package]
+name = "blocks"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
