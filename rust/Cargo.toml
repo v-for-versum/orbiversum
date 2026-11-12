@@ -3,6 +3,8 @@ resolver = "2"
 members = ["crates/blocks", "crates/dsp", "crates/os", "crates/applets", "tools/render-wav"]
 default-members = ["crates/blocks", "crates/dsp", "crates/os", "crates/applets", "tools/render-wav"]
 
+exclude = ["firmware-jc3636k718c"]
+
 [workspace.package]
 edition = "2021"
 version = "0.1.0"

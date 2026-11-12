@@ -1,0 +1,9 @@
+# Overrides on top of ../../sdkconfig.jc3636k718c (the board baseline).
+# esp-idf-sys needs a larger main stack than the C app for std threads.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# The board's custom partitions.csv (OTA + storage) is resolved relative to the
+# generated CMake project under target/, where it does not exist. Spike uses a
+# built-in table; the real layout is a follow-up decision.
+# CONFIG_PARTITION_TABLE_CUSTOM is not set
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y

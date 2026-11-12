@@ -1,0 +1,21 @@
+[package]
+name = "firmware-jc3636k718c"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Own workspace root: this crate builds only for xtensa-esp32s3-espidf and must
+# never be part of the host `cargo test --workspace`.
+[workspace]
+
+[dependencies]
+esp-idf-svc = "0.53"
+log = "0.4"
+
+[build-dependencies]
+embuild = "0.33"
+
+# The C BSP (and its Component Manager dependencies: LVGL, esp_lvgl_port, ...)
+# is compiled by ESP-IDF's CMake as an extra component.
+[[package.metadata.esp-idf-sys.extra_components]]
+component_dirs = ["../../components/bsp_jc3636k718c"]

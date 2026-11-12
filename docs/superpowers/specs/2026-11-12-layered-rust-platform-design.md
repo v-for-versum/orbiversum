@@ -82,7 +82,19 @@ firmware-<board>        бинарник: выбирает плату и спи�
 
 ## Риски и неизвестное
 
-- Сборка Rust под `xtensa-esp32s3` с PSRAM (тулчейн `espup`, `esp-idf-sys`) и совместимость с ESP-IDF 6.1.0 не проверены.
+- Сборка Rust под `xtensa-esp32s3` и FFI к C BSP (спайк, `rust/firmware-jc3636k718c`):
+  - Собрано и слинковано: бинарник `std` Rust под `xtensa-esp32s3-espidf`; C BSP подключён как `extra_components`,
+    в ELF присутствуют `bsp_init`, `bsp_audio_out_init`, `bsp_audio_out_write`; образ 998 КБ, `espflash save-image` проходит.
+  - Версии: espup 0.19.0, Xtensa Rust 1.97.0.0 (toolchain `esp`), espflash 4.7.0, ldproxy 0.3.5,
+    esp-idf-sys 0.38.1, esp-idf-svc 0.53.0, esp-idf-hal 0.47.0, embuild 0.33.7.
+  - ESP-IDF 6.1.0 (`ESP_IDF_VERSION = "v6.1"`, `CONFIG_IDF_INIT_VERSION="6.1.0"`) собирается с `esp-idf-sys` 0.38.1,
+    хотя в его CHANGELOG заявлена лишь «basic compatibility» с 6.0; сборка IDF и компонентов BSP (LVGL 9.6.0, esp_lvgl_port 2.9.0)
+    прошла, предупреждения CMake про include-каталоги wpa_supplicant/esp_wifi не фатальны.
+  - Ограничения: кастомная `partitions.csv` не находится (путь считается от каталога сборки `esp-idf-sys`), в спайке
+    используется `PARTITION_TABLE_SINGLE_APP_LARGE`; раскладку OTA/storage надо решать отдельно.
+    `sdkconfig.jc3636k718c` берётся из корня репозитория (сейчас не закоммичен) как база sdkconfig.
+  - НЕ проверено: прошивка платы и монитор (`rust: bsp ok`, PSRAM, отсутствие перезагрузок) — плата по USB не подключена;
+    поведение `bsp_init` при вызове из Rust на железе неизвестно.
 - Нагрузка на CPU тяжёлых дронов не измерена; оценки только по составу UGen.
 - Замеров FPS дисплея нет; требуется на срезе.
 - Скорость и поведение `fundsp` на Xtensa не проверены; Starlids планируется писать вручную (~150 строк).
