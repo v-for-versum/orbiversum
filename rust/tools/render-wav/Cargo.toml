@@ -4,3 +4,5 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+dsp = { path = "../../crates/dsp" }
+hound = "3.5"
