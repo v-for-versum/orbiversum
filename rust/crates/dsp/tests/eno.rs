@@ -57,8 +57,8 @@ fn eno_output_finite_and_bounded() {
         assert!(s.is_finite());
         peak = peak.max(s.abs());
     }
-    // pad is tanh-bounded; the note layers add headroom (peak ~1.56 at amp 1)
-    assert!(peak < 2.5, "peak {peak}");
+    // pad is tanh-bounded; the note layers add headroom (peak ~0.93 at amp 1 after the output trim)
+    assert!(peak < 1.0, "peak {peak}");
     assert!(peak > 0.01, "silent: {peak}");
 }
 

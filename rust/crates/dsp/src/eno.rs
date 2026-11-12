@@ -34,6 +34,8 @@ pub const P_FINAL: usize = 7;
 pub static ENO_NAMES: [&str; prof::SECTIONS] = ["control", "pad", "moog", "klank", "piano", "perc", "reverb", "final"];
 
 const CTRL: usize = 32;
+/// Output trim: the layers peak at ~1.56 at amp 1, which the i16 conversion would hard-clip.
+const OUT_TRIM: f32 = 0.6;
 const VOICES: usize = 8;
 const GROUP: usize = 4;
 const GROUPS: usize = VOICES / GROUP;
@@ -394,7 +396,7 @@ impl Voice for Eno {
     #[cfg_attr(target_arch = "xtensa", link_section = ".iram1.eno_process")]
     fn process(&mut self, out: &mut [[f32; 2]]) {
         prof::set_names(&ENO_NAMES);
-        let amp = self.amp;
+        let amp = self.amp * OUT_TRIM;
         let mut pb = prof::Block::start();
         let mut i = 0;
         while i < out.len() {
