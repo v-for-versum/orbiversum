@@ -83,6 +83,10 @@ pub trait Applet {
 pub trait AppletUi {
     fn info(&self) -> AppletInfo;
     fn input(&mut self, ev: InputEvent);
+    /// The framebuffer no longer holds this applet's picture (it was switched
+    /// to, or an overlay such as the menu painted over it): the next `draw`
+    /// must repaint everything and mark the whole screen dirty.
+    fn invalidate(&mut self);
     /// `Canvas` is an `embedded-graphics` `DrawTarget<Color = Rgb565, Error = Infallible>`
     /// (the trait itself is not dyn compatible, so `dyn DrawTarget` is impossible).
     fn draw(&mut self, d: &mut Canvas<'_>, dirty: &mut Dirty);

@@ -56,6 +56,10 @@ impl AppletUi for ParamUi {
         }
     }
 
+    fn invalidate(&mut self) {
+        self.drawn = None;
+    }
+
     fn draw(&mut self, d: &mut Canvas<'_>, dirty: &mut Dirty) {
         let (hz, amp) = (self.params.hz(), self.params.amp());
         match self.drawn {
