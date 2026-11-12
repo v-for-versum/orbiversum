@@ -6,20 +6,28 @@ pub struct MoogLadder {
     sr: f32,
     s: [f32; 4],
     last: f32,
+    /// cutoff the cached coefficients were computed for (NaN = none yet)
+    cached_cutoff: f32,
+    tune: f32,
+    acr: f32,
 }
 
 impl MoogLadder {
     pub fn new(sr: f32) -> MoogLadder {
-        MoogLadder { sr, s: [0.0; 4], last: 0.0 }
+        MoogLadder { sr, s: [0.0; 4], last: 0.0, cached_cutoff: f32::NAN, tune: 0.0, acr: 0.0 }
     }
 
     /// `res` 0..4; clamped to 3.8 so the ladder always rings out instead of
     /// self-oscillating (the Huovilainen feedback gain is ~4 at oscillation).
     pub fn tick(&mut self, x: f32, cutoff_hz: f32, res: f32) -> f32 {
-        let fc = (cutoff_hz / self.sr).clamp(0.0005, 0.45);
-        let fcr = 1.8730 * fc * fc * fc + 0.4955 * fc * fc - 0.6490 * fc + 0.9988;
-        let acr = -3.9364 * fc * fc + 1.8409 * fc + 0.9968;
-        let tune = 1.0 - expf(-2.0 * core::f32::consts::PI * (fc * 0.5) * fcr);
+        if cutoff_hz != self.cached_cutoff {
+            let fc = (cutoff_hz / self.sr).clamp(0.0005, 0.45);
+            let fcr = 1.8730 * fc * fc * fc + 0.4955 * fc * fc - 0.6490 * fc + 0.9988;
+            self.acr = -3.9364 * fc * fc + 1.8409 * fc + 0.9968;
+            self.tune = 1.0 - expf(-2.0 * core::f32::consts::PI * (fc * 0.5) * fcr);
+            self.cached_cutoff = cutoff_hz;
+        }
+        let (tune, acr) = (self.tune, self.acr);
         let res4 = res.clamp(0.0, 3.8) * acr;
         // 2x oversampled, input repeated.
         for _ in 0..2 {

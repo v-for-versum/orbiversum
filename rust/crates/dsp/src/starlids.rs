@@ -195,7 +195,7 @@ impl Voice for Starlids {
             let cut = self.moog_cut;
             let l = self.hpf[0].tick(self.moog[0].tick(tanhf(l), cut, 0.0));
             let r = self.hpf[1].tick(self.moog[1].tick(tanhf(r), cut, 0.0));
-            *frame = [l.clamp(-1.0, 1.0), r.clamp(-1.0, 1.0)];
+            *frame = [l, r];
         }
     }
 }

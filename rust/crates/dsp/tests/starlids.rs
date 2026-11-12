@@ -47,17 +47,46 @@ fn starlids_output_is_finite_and_bounded() {
 #[test]
 fn starlids_handles_extreme_hz() {
     for hz in [0.0f32, 1.0, 20_000.0, 24_000.0] {
-        for o in render(3, hz, 96_000, 256).iter().flatten() {
+        let out = render(3, hz, 96_000, 256);
+        for o in out.iter().flatten() {
             assert!(o.is_finite() && o.abs() <= 1.0, "hz {hz}: {o}");
+        }
+        if hz == 0.0 {
+            assert!(out.iter().flatten().all(|&x| x == 0.0), "hz 0 must be silent");
         }
     }
 }
 
 #[test]
+fn sine_handles_extreme_hz() {
+    use dsp::sine::Sine;
+    for hz in [0.0f32, 1.0, 20_000.0, 24_000.0] {
+        let mut s = Sine::new(SR);
+        s.set_params(hz, 1.0);
+        let mut out = vec![[0.0f32; 2]; 48_000];
+        s.process(&mut out);
+        assert!(out.iter().flatten().all(|x| x.is_finite() && x.abs() <= 1.0), "hz {hz}");
+    }
+}
+
+#[test]
 fn starlids_block_size_independence() {
-    let n = 30_000;
-    let base = render(9, 220.0, n, 1024);
+    // 6 s; params change every 10_000 samples at the same absolute positions for every chunking.
+    let n = 288_000;
+    let seg = 10_000;
+    let run = |block: usize| {
+        let mut v = Starlids::new(9, SR);
+        let mut out = vec![[0.0f32; 2]; n];
+        for (i, s) in out.chunks_mut(seg).enumerate() {
+            v.set_params(110.0 + 37.0 * (i % 5) as f32, 0.4 + 0.1 * (i % 5) as f32);
+            for c in s.chunks_mut(block) {
+                v.process(c);
+            }
+        }
+        out
+    };
+    let base = run(1024);
     for b in [1usize, 7, 128] {
-        assert_eq!(render(9, 220.0, n, b), base, "block {b}");
+        assert!(run(b) == base, "block {b}");
     }
 }
