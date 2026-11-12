@@ -1,0 +1,46 @@
+menu "Knob network services"
+
+    config APP_NET_PROV_PREFIX
+        string "Provisioning name prefix"
+        default "KNOB"
+        help
+            The SoftAP raised during provisioning is named
+            "<prefix>_<last 3 bytes of MAC>", for example KNOB_A1B2C3.
+            This makes several devices on a desk distinguishable.
+
+    config APP_NET_PROV_POP
+        string "Proof of possession"
+        default "knob1234"
+        help
+            Password the provisioning app must supply. The built-in SoftAP
+            transport also uses it as the SoftAP password, so it must be at
+            least 8 characters.
+
+    config APP_NET_USE_STATIC_CREDENTIALS
+        bool "Use credentials compiled into the firmware"
+        default n
+        help
+            Skips provisioning entirely and connects with the SSID and
+            password below. Convenient while developing, but the password ends
+            up in the binary and in git — do not ship a release with this on.
+
+    config APP_NET_STATIC_SSID
+        string "Static Wi-Fi SSID"
+        depends on APP_NET_USE_STATIC_CREDENTIALS
+        default ""
+
+    config APP_NET_STATIC_PASSWORD
+        string "Static Wi-Fi password"
+        depends on APP_NET_USE_STATIC_CREDENTIALS
+        default ""
+
+    config APP_NET_RETRY_MAX
+        int "Reconnect attempts before reporting failure"
+        range 1 100
+        default 10
+
+    config APP_NET_HOSTNAME
+        string "mDNS / DHCP hostname"
+        default "knob"
+
+endmenu

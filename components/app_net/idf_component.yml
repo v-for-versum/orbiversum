@@ -1,0 +1,22 @@
+# ---------------------------------------------------------------------------
+# Component manager manifest for the network component.
+# ---------------------------------------------------------------------------
+#
+# ESP-IDF 6.0 moved Wi-Fi provisioning out of the core tree and into the
+# registry as espressif/network_provisioning, renaming the API in the process.
+# On IDF 5.x the component still ships with IDF itself and nothing needs to be
+# fetched, so the dependency is gated on the IDF version.
+#
+# Without the rule below, IDF 5.x fails with a duplicate provisioning manager
+# and IDF 6.x fails with:
+#
+#   Failed to resolve component 'wifi_provisioning' required by component
+#   'app_net': unknown name.
+#
+# src/app_prov.h maps the two APIs onto one set of names.
+
+dependencies:
+  espressif/network_provisioning:
+    version: "^1.3.1"
+    rules:
+      - if: "idf_version >=6.0"

@@ -1,0 +1,262 @@
+menu "Knob BSP (Guition JC3636K718C)"
+
+    menu "Display (ST77916, QSPI)"
+
+        config BSP_LCD_QSPI_FREQ_MHZ
+            int "QSPI clock (MHz)"
+            range 10 80
+            default 50
+            help
+                Clock for the panel's QSPI bus. 40 MHz is what the driver's
+                own configuration macro uses and what the ST77916 is
+                characterised at. This board has been observed running
+                happily at 80 MHz, but that is outside the panel's specified
+                range — raise it only if you have measured a real need, and
+                expect artefacts on a marginal board.
+
+        config BSP_LCD_USE_VENDOR_INIT
+            int "Use the vendor LCD init sequence (0 = driver default, 1 = vendor)"
+            range 0 1
+            default 1
+            help
+                The esp_lcd_st77916 driver carries its own init sequence for
+                360x360 panels and that is what normally works. Two revisions
+                of the ST77916 exist in the wild, though, and the vendor's
+                sequence (transcribed from the Arduino demo in
+                2-Program Example/) matches this board's panel.
+
+                Enable this if the screen shows snow, a shifted image, or
+                wrong geometry with the default sequence.
+
+        config BSP_LCD_BUFFER_LINES
+            int "LVGL draw buffer height (lines)"
+            range 8 360
+            default 16
+            help
+                Partial-render buffer, in lines of 360 pixels.
+
+                16 is the value this panel is known to render cleanly at.
+                Larger buffers look attractive — fewer flushes, less
+                per-transfer overhead — but on this board they produce visible
+                banding and flicker, and the reason is where the buffer ends
+                up: 16 lines is 360 x 16 x 2 = 11.5 KB per buffer, so a double
+                buffer fits comfortably in internal DMA-capable RAM. Going
+                wider pushes the allocation into PSRAM, and PSRAM bandwidth
+                cannot keep the QSPI bus fed.
+
+                Raise it only together with a reason, and watch the panel for
+                a few minutes rather than a few seconds.
+
+        config BSP_LCD_DOUBLE_BUFFER
+            int "Double buffering (0/1)"
+            range 0 1
+            default 1
+            help
+                Two buffers let rendering of the next area overlap the QSPI
+                transfer of the current one. Costs the same amount of memory
+                again, and is worth it here because the panel bus is the
+                bottleneck.
+
+        config BSP_LCD_BUFFER_IN_PSRAM
+            int "Place LVGL draw buffers in PSRAM (0/1)"
+            range 0 1
+            default 0
+            help
+                Off by default, which puts the two 11.5 KB buffers in internal
+                DMA-capable RAM. That is the configuration this panel renders
+                cleanly in.
+
+                The original reasoning for PSRAM was that internal RAM is
+                scarce (about 320 KB on this part) and that PSRAM-backed
+                buffers free it for Wi-Fi and audio DMA. That trade is real,
+                but it loses here: driving a QSPI panel out of PSRAM shows up
+                as banding and flicker long before it shows up as a memory
+                shortage. Turn it back on only if you have measured a genuine
+                internal-RAM problem and have accepted the artefacts.
+
+        config BSP_LCD_SWAP_BYTES
+            int "Swap bytes in the draw buffer (0/1)"
+            range 0 1
+            default 1
+            help
+                Required on this panel, hence the default.
+
+                Without it the image is not merely mis-tinted but
+                brightness-scrambled: a near-black background renders as pale
+                pink and a blue arc as green. That is the signature of
+                exchanged bytes in RGB565 rather than of a wrong RGB/BGR
+                order — BGR would swap only red and blue and leave dark
+                colours dark, which is the distinction worth remembering when
+                reading a screenshot.
+
+                Runs on the LVGL draw buffer, so it costs nothing per frame.
+                Set to 0 only if a future panel revision wants the other
+                endianness.
+
+        config BSP_LCD_BRIGHTNESS_DEFAULT
+            int "Default backlight brightness (%)"
+            range 0 100
+            default 80
+
+    endmenu
+
+    menu "Touch (CST816S, I2C)"
+
+        config BSP_TOUCH_I2C_FREQ_KHZ
+            int "I2C clock (kHz)"
+            range 100 400
+            default 100
+            help
+                The CST816S is specified for 100 kHz. 400 kHz usually works
+                and halves the time spent reading points, but it is outside
+                the datasheet — drop back to 100 kHz if touches are missed or
+                the controller returns garbage.
+
+        config BSP_TOUCH_SWAP_XY
+            int "Swap touch axes (0/1)"
+            range 0 1
+            default 0
+
+        config BSP_TOUCH_MIRROR_X
+            int "Mirror touch horizontally (0/1)"
+            range 0 1
+            default 0
+
+        config BSP_TOUCH_MIRROR_Y
+            int "Mirror touch vertically (0/1)"
+            range 0 1
+            default 0
+
+    endmenu
+
+    menu "Encoder"
+
+        config BSP_ENCODER_SWAP_DIRECTION
+            int "Swap rotation direction (0/1)"
+            range 0 1
+            default 0
+            help
+                Turn this on if clockwise reports as anticlockwise. It swaps
+                the A and B inputs in software, so no rewiring is needed.
+
+        config BSP_ENCODER_USE_BUTTON
+            bool "Use a push button on the knob"
+            default n
+            help
+                Off by default because this board has no readable button pin —
+                see docs/HARDWARE.md. The vendor demo's pincfg.h defines
+                BTN_PIN 0, but that macro is never used in the vendor sources
+                and GPIO0 is the LED ring's data line.
+
+                Turn this on only if you have found a switch wired to a free
+                GPIO and set CONFIG_BSP_ENCODER_BUTTON_GPIO to match.
+
+        config BSP_ENCODER_BUTTON_GPIO
+            int "Push button GPIO"
+            depends on BSP_ENCODER_USE_BUTTON
+            default -1
+
+        config BSP_ENCODER_BUTTON_ACTIVE_LEVEL
+            int "Push button active level (0 or 1)"
+            depends on BSP_ENCODER_USE_BUTTON
+            range 0 1
+            default 0
+
+        config BSP_ENCODER_PROBE
+            bool "Run the encoder line probe at boot"
+            default n
+            help
+                Samples the two encoder lines from a task for a few seconds and
+                prints what they actually do: how often each line moves, how
+                long each state is held, and — decisively — whether A and B
+                overlap in phase (quadrature) or each pulls itself low alone
+                (two independent pulse lines).
+
+                The driver in bsp_encoder.c has to assume one of those two, and
+                the two call for different decoders. This settles it from
+                measurements on the board rather than from a datasheet.
+
+                It costs one low-priority task and about 1% of a core while it
+                runs, so leave it off in anything you ship.
+
+    endmenu
+
+    menu "Peripherals"
+
+        config BSP_LED_GPIO
+            int "Addressable RGB ring GPIO (-1 = not fitted)"
+            default 0
+            help
+                Data line of the WS2812-compatible ring. GPIO0 is correct for
+                this board, confirmed against the schematic and two
+                independent firmwares.
+
+                GPIO0 is also an ESP32-S3 strapping pin, so the ring must not
+                be driven until after boot — which is what bsp_led_init()
+                does. Set this to -1 to compile the ring out entirely.
+
+        config BSP_LED_COUNT
+            int "Number of LEDs in the ring"
+            depends on BSP_LED_GPIO >= 0
+            range 1 256
+            default 13
+
+        config BSP_LED_BRIGHTNESS_LIMIT
+            int "Maximum ring brightness (0-255)"
+            depends on BSP_LED_GPIO >= 0
+            range 1 255
+            default 128
+            help
+                Per-channel ceiling applied by bsp_led_*. The ring shares the
+                board's power budget with the display backlight and the motor;
+                full white on 13 LEDs will brown out the rail.
+                128 is the current compromise: a third more light than 96 on the
+                colours the instrument actually draws, against the same rail
+                budget. Raise it in steps and watch for a sag — see
+                docs/HARDWARE.md.
+
+        config BSP_HAPTIC_AUTO_CALIBRATE
+            bool "Auto-calibrate the haptic driver at boot"
+            default n
+            help
+                The DRV2605L can measure the particular LRA fitted and tune its
+                feedback path to it. That improves the feel of short effects,
+                but it costs a few hundred milliseconds at boot and makes the
+                knob buzz once during start-up.
+
+                Off by default. The shipping firmware for this board drives the
+                motor open-loop against the ROM library and feels fine, so
+                there is no reason to pay for calibration until you have
+                decided you want it.
+
+                It can also be run on demand: bsp_haptic_calibrate().
+
+    endmenu
+
+    menu "Microphone"
+
+        choice BSP_MIC_INTERFACE
+            prompt "Microphone interface"
+            default BSP_MIC_INTERFACE_PDM
+            help
+                The schematic routes only two signals to the microphone (clock
+                on GPIO5, data on GPIO4). A conventional I2S MEMS mic needs a
+                third, word-select line, so the fitted part is almost
+                certainly PDM. Switch to I2S only if you have identified the
+                part and wired the extra line.
+
+            config BSP_MIC_INTERFACE_PDM
+                bool "PDM (clock + data)"
+
+            config BSP_MIC_INTERFACE_I2S
+                bool "I2S (bit clock + word select + data)"
+        endchoice
+
+        config BSP_MIC_WS_GPIO
+            int "Microphone word-select GPIO"
+            depends on BSP_MIC_INTERFACE_I2S
+            default -1
+
+    endmenu
+
+endmenu

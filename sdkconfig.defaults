@@ -1,0 +1,232 @@
+# ---------------------------------------------------------------------------
+# Guition JC3636K718C — baseline configuration
+# ---------------------------------------------------------------------------
+# Applied automatically on `idf.py build` when sdkconfig does not exist yet.
+# Delete sdkconfig and rebuild to pick up changes made here.
+#
+# Hardware: ESP32-S3R8, 16 MB QIO flash, 8 MB Octal (OPI) PSRAM.
+#
+# NOTE ON FLASH SPEED
+#   Flash and PSRAM share the SPI0 clock domain on the ESP32-S3. 80 MHz is the
+#   setting guaranteed to work with Octal PSRAM, and it is what N16R8 parts are
+#   normally provisioned at. 120 MHz is possible on this chip but requires
+#   CONFIG_SPI_FLASH_HPM_ENA and a board that actually tolerates it; the
+#   vendor's Arduino screenshot advertises "QIO 120MHz", which the Arduino core
+#   then clamps. Do not chase it — display throughput is bound by the QSPI
+#   panel bus and PSRAM, not by flash.
+# ---------------------------------------------------------------------------
+
+# --- Target -----------------------------------------------------------------
+CONFIG_IDF_TARGET="esp32s3"
+
+# --- Flash ------------------------------------------------------------------
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASH_SAMPLE_MODE_STR=y
+
+# --- Partition table --------------------------------------------------------
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# --- CPU --------------------------------------------------------------------
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# Run the application on core 1 and leave the Wi-Fi/BT stack on core 0.
+CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1=y
+
+# --- Octal PSRAM (8 MB) -----------------------------------------------------
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_BOOT_INIT=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
+CONFIG_SPIRAM_RODATA=y
+# Skip the full PSRAM march test: it costs ~1 s of boot time and Octal PSRAM on
+# a soldered-down part does not benefit from it.
+CONFIG_SPIRAM_MEMTEST=n
+
+# --- Display draw buffers ---------------------------------------------------
+# 16 lines x 2 buffers x 360 px x 2 B = 23 KB, and with buff_dma the allocation
+# is MALLOC_CAP_DMA only: it has to come out of the DMA-capable internal RAM that
+# Wi-Fi also needs.
+#
+# This was 12 for a long time, and 8 before that, because of exactly that pool. At
+# 16 lines the SoftAP could not allocate its 752-byte beacon buffers, and the Wi-Fi
+# driver's reaction to that failure is an unchecked NULL dereference and a reboot
+# loop. Eight lines freed 11.5 KB of that pool; twelve kept 17.3 KB in internal DMA
+# and still cut the flush count by a third against eight.
+#
+# 16 is affordable now because LVGL gave up its private 64 KB heap — see the LVGL
+# memory note further down. That pool was reserved whether it was used or not, and
+# the interface only ever used about 40 KB of it; with LVGL on the shared heap the
+# runtime figures after the network comes up went from 12.9 KB free with a 7.7 KB
+# largest block to 37.2 KB free with 27.6 KB, and DMA-capable free from 5.1 KB to
+# 29.4 KB. Twenty-three of those kilobytes are this change.
+#
+# The margin is thinner than 12 lines had, so if anything about the Wi-Fi or the
+# heap looks wrong at boot, this is the first line to put back: 12 is known good.
+#
+# The trade is QSPI flushes per frame and not a visual one: the panel still renders
+# out of internal DMA-capable RAM, so there is none of the banding and flicker that
+# the PSRAM-buffer option causes on this panel. See BSP_LCD_BUFFER_IN_PSRAM.
+CONFIG_BSP_LCD_BUFFER_LINES=16
+
+# --- Cache (required for 80 MHz Octal PSRAM) --------------------------------
+CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
+CONFIG_ESP32S3_DATA_CACHE_64KB=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+CONFIG_ESP32S3_INSTRUCTION_CACHE_8WAYS=y
+CONFIG_ESP32S3_DATA_CACHE_8WAYS=y
+
+# --- FreeRTOS ---------------------------------------------------------------
+# 1 kHz tick keeps the LVGL tick and the encoder polling loop smooth.
+CONFIG_FREERTOS_HZ=1000
+
+# --- Console ----------------------------------------------------------------
+# UART0 goes to the on-board CH340 bridge. The native USB-Serial-JTAG port is
+# enabled as a secondary console, so either USB-C port works for `idf.py
+# monitor` and for JTAG debugging.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=y
+
+# --- Application ------------------------------------------------------------
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+
+# --- Wi-Fi ------------------------------------------------------------------
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=64
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=y
+
+# ---------------------------------------------------------------------------
+# LVGL 9 — supplied by the lvgl/lvgl component that esp_lvgl_port pulls in.
+# These symbols only exist after the component manager has fetched LVGL, so a
+# first `idf.py build` may warn that they are unknown; the second build applies
+# them. Listing them here saves a menuconfig pass on a fresh clone.
+# ---------------------------------------------------------------------------
+CONFIG_LV_COLOR_DEPTH_16=y
+CONFIG_LV_COLOR_FORMAT_RGB565=y
+CONFIG_LV_DEF_REFR_PERIOD=10
+# How far a finger must travel before a swipe counts as one. LVGL's default of
+# 50 px is a seventh of the way across a 360 px screen before anything happens,
+# and it is what made swipes feel like they were being argued with. 28 px is
+# still far more than a tap that wobbles.
+CONFIG_LV_INDEV_DEF_GESTURE_LIMIT=28
+# CONFIG_LV_ATTRIBUTE_FAST_MEM_USE_IRAM is deliberately NOT set, and it has now been
+# tried rather than assumed.
+#
+# The option moves LVGL's hot drawing routines into IRAM, which is the one lever that
+# speeds up the software renderer itself — and the renderer is what this instrument is
+# short of: the panel's QSPI bus needs about 10 ms for a whole 360x360 frame while the
+# renderer spends 55-82 ms on one, so the limit is drawing and not the bus.
+#
+# It fails twice over. First it cannot even be switched on alone: LVGL then declares
+# the same function in more than one section, GCC 15 (which IDF 6.x uses) reports the
+# mismatch as an error, and components are compiled with -Werror:
+#
+#   lv_draw_sw_blend_to_a8.c:369:1: error: ignoring attribute
+#   'section (".iram1.13")' because it conflicts with previous
+#   'section (".iram1.9")' [-Werror=attributes]
+#
+# That one is only a demoted warning away — -Wno-error=attributes on the LVGL
+# component compiles cleanly, and was verified to.
+#
+# Then it does not fit, and not for want of RAM. It moves LVGL's fast-memory DATA
+# tables into IRAM as well as its code, and on this chip IRAM data is the same SRAM as
+# DRAM, so the tables spend 13 KB of the scarcest resource on the board and buy
+# nothing:
+#
+#   region `dram0_0_seg' overflowed by 13088 bytes
+#
+# Freeing LVGL's private pool (below) pays for that and the DRAM overflow goes away —
+# but the link then fails in the exception vectors, which is the real wall:
+#
+#   xtensa_vectors.S:466:(.DebugExceptionVector.text+0x3):
+#   dangerous relocation: j: cannot encode: xt_debugexception
+#
+# The debug vector sits at a fixed address and reaches its handler with a `j`
+# instruction of limited range. Enough LVGL code in IRAM pushes the handler beyond it,
+# and no configuration fixes that: the vectors belong to IDF.
+#
+# Worth knowing before trying again: a 15% faster renderer takes an 82 ms page change
+# to about 70 ms, which is still more than two frames. The full-screen redraw is a
+# drawing problem, not a placement problem.
+#
+# What IS kept from the experiment is LVGL's heap. By default LVGL carries its own
+# 64 KB pool (CONFIG_LV_MEM_SIZE) as a static array in .bss, reserved whether it is
+# used or not, and internal DRAM is where the Wi-Fi SoftAP beacon, the display's DMA
+# buffers and the runtime heap all come from — at boot there are only kilobytes left.
+# The C library allocator puts LVGL on the shared heap instead: the same total DRAM,
+# taken on demand, and what LVGL does not use stays available to everything else.
+# CONFIG_LV_USE_BUILTIN_MALLOC is not set
+CONFIG_LV_USE_CLIB_MALLOC=y
+# The LVGL performance overlay draws a live FPS/CPU counter into a corner of the
+# panel — which on a 360 px round screen is outside the circle anyway, and a frame
+# counter is developer furniture on an instrument. LOG MODE is the other half of
+# that setting and is the useful one: the same FPS and CPU numbers, written to the
+# log once a second, where they can be read deliberately. It needs LVGL's log at
+# USER level, because that is the level the monitor reports at.
+CONFIG_LV_USE_LOG=y
+CONFIG_LV_LOG_LEVEL_USER=y
+CONFIG_LV_USE_PERF_MONITOR=y
+CONFIG_LV_USE_PERF_MONITOR_LOG_MODE=y
+CONFIG_LV_USE_SYSMON=y
+CONFIG_LV_USE_OBSERVER=y
+CONFIG_LV_USE_FLEX=y
+CONFIG_LV_USE_GRID=y
+CONFIG_LV_USE_SNAPSHOT=y
+CONFIG_LV_USE_QRCODE=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+
+# --- Knob encoder (espressif/knob) ------------------------------------------
+# 3 ms is the component default; it is fast enough to never miss a detent at
+# hand speed while keeping the polling timer cheap.
+CONFIG_KNOB_PERIOD_TIME_MS=3
+CONFIG_KNOB_DEBOUNCE_TICKS=2
+CONFIG_KNOB_HIGH_LIMIT=1000
+CONFIG_KNOB_LOW_LIMIT=-1000
+
+# --- Touch (esp_lcd_touch) --------------------------------------------------
+CONFIG_ESP_LCD_TOUCH_MAX_POINTS=1
+
+# --- Provisioning security ---------------------------------------------------
+# protocomm compiles its security schemes out unless they are selected, and on
+# IDF 6.x only version 2 is enabled by default. NETWORK_PROV_SECURITY_1 is
+# then an undeclared identifier rather than a value that fails at runtime —
+# the SoftAP provisioning path needs it.
+CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_1=y
+
+# --- USB MIDI device (components/midi) ---------------------------------------
+# The TinyUSB MIDI class is compiled OUT by default: with the count at zero,
+# CFG_TUD_MIDI is 0 and neither tud_midi_* nor TUD_MIDI_DESCRIPTOR() exists at
+# all, so midi_in.c does not merely misbehave — it fails to compile. This line
+# is the half of the espressif/esp_tinyusb dependency that a manifest cannot
+# express.
+#
+# It is also the one setting that has to reach an EXISTING sdkconfig: a new
+# symbol appears in it on the next reconfigure and takes this value, whereas a
+# symbol sdkconfig already records keeps what sdkconfig says.
+CONFIG_TINYUSB_MIDI_COUNT=1
+
+# The console side is deliberately NOT touched here. USB-Serial-JTAG and
+# USB-OTG are two controllers behind one PHY on this chip, so the USB console is
+# gone while the application runs — that is the accepted cost of the port being
+# a MIDI interface, and it needs no setting: the ROM loader is unaffected, the
+# log still goes out of UART0, and the USB console cannot be read from a port
+# the MIDI device is using in any case. CONFIG_ESP_CONSOLE_SECONDARY_NONE=y is
+# the line to try if the host ever fails to enumerate the device; it is not part
+# of this change because nothing here has been measured on hardware yet.
+
+# The ring shares the rail with the backlight, the motor and the DAC.
+# 128 is a third more light than 96, against the same rail budget; see
+# docs/HARDWARE.md.
+CONFIG_BSP_LED_BRIGHTNESS_LIMIT=128

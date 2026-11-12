@@ -1,0 +1,18 @@
+# Partition table for Guition JC3636K718C (16 MB flash)
+#
+# Layout rationale:
+#   * Two 4 MB OTA slots — enough for an app with LVGL 9, several fonts and a
+#     handful of images, and 4 MB is the largest slot size that still leaves
+#     room for an asset partition.
+#   * `storage` is a SPIFFS partition for runtime assets (images, sounds,
+#     saved SquareLine screens, certificates). Use tools/upload_fs.ps1 to
+#     populate it without reflashing the application.
+#   * NVS is where the Wi-Fi provisioning data and app settings live.
+#
+# Name,     Type, SubType, Offset,  Size,  Flags
+nvs,        data, nvs,     ,        0x6000,
+otadata,    data, ota,     ,        0x2000,
+phy_init,   data, phy,     ,        0x1000,
+ota_0,      app,  ota_0,   ,        4M,
+ota_1,      app,  ota_1,   ,        4M,
+storage,    data, spiffs,  ,        7M,

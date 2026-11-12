@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# Component manager manifest for the JC3636K718C board support package.
+# ---------------------------------------------------------------------------
+# `idf.py build` fetches these automatically on a fresh clone; there is no
+# separate "get dependencies" step for a normal workflow.
+#
+# esp_lcd_st77916 >= 2.0.0 is required for the QSPI interface this panel uses,
+# and 2.x in turn needs ESP-IDF >= 5.4 — hence the idf constraint below.
+#
+# The component versions of esp_lvgl_port/esp_lcd_touch/button are not used by
+# this BSP alone; esp_lvgl_port only compiles its touch and button support when
+# those components are present in the build graph, so they have to be declared.
+#
+# espressif/knob is deliberately NOT declared. It decodes quadrature, and this
+# board's encoder is not quadrature — two independent pulse lines, measured. See
+# bsp_encoder.h and docs/HARDWARE.md. Declaring it would let esp_lvgl_port
+# compile knob support that this BSP never uses.
+#
+# lvgl is marked public: the BSP's public headers expose lv_display_t and
+# lv_indev_t, so anything depending on this component needs LVGL's headers too.
+
+dependencies:
+  idf: ">=5.4"
+
+  espressif/esp_lcd_st77916: "~2.0.2"
+  espressif/esp_lcd_touch: "^1.2.0"
+  espressif/esp_lcd_touch_cst816s: "^1.1.1"
+  espressif/esp_lvgl_port: "^2.7.2"
+  espressif/button: "^4.1.5"
+  # 3.x is required rather than merely newer: led_strip 2.5.x calls
+  # heap_caps_calloc() and uses MALLOC_CAP_* without including
+  # esp_heap_caps.h, which only compiled while IDF pulled that header in
+  # transitively. IDF 6 stopped doing so, and 2.5.x now fails with
+  # "MALLOC_CAP_DEFAULT undeclared".
+  espressif/led_strip: "^3.0.0"
+
+  lvgl/lvgl:
+    version: "^9.4"
+    public: true

@@ -1,0 +1,21 @@
+{
+  "name": "esp32-round-base",
+  "version": "0.1.0",
+  "new_install_prompt_erase": false,
+  "image": {
+    "path": "firmware/esp32-round-base.bin",
+    "size": 0,
+    "sha256": ""
+  },
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "firmware/esp32-round-base.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

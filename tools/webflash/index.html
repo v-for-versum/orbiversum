@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+<title>OBOD — прошивка из браузера</title>
+<!--
+  Страница для записи прошивки прибора OBOD из браузера.
+
+  Открывать только по защищённому адресу: Web Serial доступен на localhost или
+  по https. Каталог отдаёт tools/webflash/serve.ps1 на http://localhost:8787/.
+
+  Кнопку и диалог записи рисует компонент esp-web-install-button из esp-web-tools.
+  Он подключается с unpkg, локальных копий нет — при первом открытии нужна сеть.
+  Манифест лежит рядом (manifest.json) и указывает на firmware/OBOD.bin: единый
+  образ, собранный tools/webflash/merge.ps1 из файлов и адресов build/flash_args.
+
+  Оформление — из страниц документации этого проекта (web/): чёрный фон, панели #011b1c,
+  скругление 24 px, IBM Plex Sans, мятная зелень акцентом, красный для
+  предупреждений.
+-->
+<style>
+  :root {
+    --bg:        #000;
+    --panel:     #011b1c;
+    --text:      #fff;
+    --grey40:    rgba(255,255,255,.4);
+    --grey70:    rgba(255,255,255,.7);
+    --green600:  #30DA98;
+    --green400:  #71FEAB;
+    --green900:  #0C7970;
+    --red500:    #FF5230;
+    --red900:    #7A0919;
+    --border:    rgba(255,255,255,.2);
+    --divider:   rgba(255,255,255,.1);
+    --radius:    24px;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-weight: 300;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  .wrap { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  h1 { font-size: 32px; font-weight: 500; line-height: 1.25; margin: 0 0 12px; }
+
+  h2 {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--red500);
+    margin: 0 0 12px;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--green400);
+    margin: 20px 0 8px;
+  }
+
+  /* Что нового: списка на этой странице нет, только вход на страницу истории —
+     та же панель, что на странице прошивки в документации. */
+  .whats-new {
+    margin: 18px 0 0;
+    padding: 14px 18px;
+    background: var(--panel);
+    border-left: 3px solid var(--green900);
+    border-radius: var(--radius);
+    color: var(--grey40);
+    font-size: 15px;
+  }
+
+  .whats-new a { font-size: 16px; font-weight: 500; }
+
+  p { margin: 0 0 12px; }
+  p:last-child { margin-bottom: 0; }
+
+  .lead { font-size: 17px; color: var(--grey70); }
+
+  section { margin-top: 40px; }
+
+  ul, ol { margin: 0; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+  li:last-child { margin-bottom: 0; }
+
+  a { color: var(--green400); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    background: rgba(48,218,152,.12);
+    border-radius: 6px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+
+  .panel {
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+  }
+
+  .panel.warn { border-left: 3px solid var(--red900); }
+
+  /* ---------- установка ---------- */
+
+  .install { text-align: center; }
+
+  esp-web-install-button {
+    display: inline-block;
+    --esp-tools-button-color: var(--green600);
+    --esp-tools-button-text-color: #00201c;
+    --esp-tools-button-border-radius: 9999px;
+  }
+
+  esp-web-install-button button {
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 500;
+    padding: 14px 32px;
+    color: #00201c;
+    background: var(--green600);
+    border: none;
+    border-radius: 9999px;
+    cursor: pointer;
+  }
+
+  esp-web-install-button button:hover { background: var(--green400); }
+
+  esp-web-install-button [slot="unsupported"],
+  esp-web-install-button [slot="not-allowed"] {
+    display: block;
+    color: var(--red500);
+    font-weight: 400;
+  }
+
+  .meta {
+    margin-top: 16px;
+    color: var(--grey40);
+    font-size: 14px;
+  }
+
+  /* ---------- таблица адресов ---------- */
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--divider); }
+  th { color: var(--grey40); font-weight: 500; font-size: 14px; }
+  td:first-child { font-family: var(--mono); font-size: 14px; white-space: nowrap; width: 90px; }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--divider);
+    color: var(--grey40);
+    font-size: 14px;
+  }
+
+  @media (max-width: 560px) {
+    .wrap { padding: 32px 18px 64px; }
+    h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <header>
+    <h1>Прошивка OBOD</h1>
+    <p class="lead">Прибор OBOD прошивается из браузера по USB. Страница сама передаёт прибору готовый образ — командная строка и Python не нужны.</p>
+  </header>
+
+  <section class="panel warn">
+    <h2>Прошивка только для Guition Knob JC3636K718C</h2>
+    <p>Это плата с круглым экраном 360 × 360 и энкодером-ободом: ESP32-S3, 8 МБ PSRAM, 16 МБ flash, экран ST77916 по QSPI. На других устройствах образ не заработает, а запись на них может сделать плату нерабочей — разметка памяти, распиновка и экран у чужих плат свои. За последствия записи на другое устройство ответственности не несём.</p>
+    <p>Спецификации этой платы — в разделе <a href="https://annabiosis.github.io/obod/hw.html">«Железо»</a>: микросхема, память, экран, кольцо, питание. Распиновка и адреса разделов — в <code>docs/HARDWARE.md</code>.</p>
+  </section>
+
+  <section class="panel install">
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate" type="button">Установить прошивку</button>
+      <span slot="unsupported">Браузер не поддерживает Web Serial. Откройте страницу в Chrome или Edge на компьютере.</span>
+      <span slot="not-allowed">Страница открыта не по защищённому адресу. Web Serial работает только на localhost или по https.</span>
+    </esp-web-install-button>
+    <p class="meta" id="meta">Образ: <code>firmware/OBOD.bin</code>, версия <span id="ver">…</span>.</p>
+  </section>
+
+  <!-- Список изменений этой странице не нужен: он живёт на сайте, одним разделом на
+       все выпуски. Здесь только ссылка на него, чтобы не держать вторую копию текста
+       и второй разбор changelog.json. -->
+  <section class="panel">
+    <p class="whats-new"><a
+      href="https://annabiosis.github.io/obod/changelog.html#v1.2.1">Что нового в 1.2.1</a> —
+      разделы и пункты этого выпуска, а также история предыдущих версий.</p>
+  </section>
+
+  <section>
+    <h2>Что нужно</h2>
+    <ul>
+      <li>Chrome или Edge на компьютере. Firefox и браузеры на телефонах Web Serial не поддерживают — кнопки установки на них не будет.</li>
+      <li>Страница открыта по защищённому адресу: <code>http://localhost:8787/</code> или по <code>https</code>. Из файла на диске и с обычного http браузер порт не отдаст.</li>
+      <li>Прибор подключён по USB и определяется системой как COM-порт. Если включён приём нот (MIDI IN), COM-порта не будет: разъём отдан MIDI-интерфейсу. Выключите приём нот на странице OPTIONS и перезагрузите прибор — после этого порт снова отладочный.</li>
+      <li>Порт свободен: закройте <code>idf.py monitor</code>, serial-монитор и всё остальное, что держит этот COM-порт.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Если прибор не отвечает</h2>
+    <p><b>При первой прошивке может понадобиться войти в режим загрузчика.</b> Это встроенный в чип ПЗУ-загрузчик ESP32-S3: он принимает прошивку по последовательному порту и работает независимо от того, что записано во флеш-памяти. Обычно страница переводит чип в этот режим сама — по линиям DTR и RTS USB-UART-моста или своей последовательностью сброса на встроенном USB-Serial-JTAG. Но на первом включении, когда прошивки ещё нет, после её стирания или падения, а также на порту USB-Serial-JTAG, где нет линий автосброса, этот путь может не сработать: чип попробует загрузиться как обычно, и запись не начнётся. В журнале esptool при этом видно, что чип не отвечает или отвечает не в том режиме, а страница не находит устройство.</p>
+    <p>Тогда зажмите кнопку <b>BOOT</b> и, не отпуская, подключите кабель — или нажмите <b>RESET</b>, если кабель уже подключён. Дождитесь, пока система увидит порт, и отпустите BOOT. <b>BOOT</b> — это вывод GPIO0, вывод начальной конфигурации: чип читает его состояние при сбросе и по нему выбирает режим загрузчика. После записи нажмите RESET или передёрните питание, иначе прибор останется в режиме загрузчика.</p>
+    <p>GPIO0 — ещё и линия данных светодиодного кольца, поэтому при зажатом BOOT кольцо может вести себя странно. На запись это не влияет: состояние вывода читается только при сбросе.</p>
+  </section>
+
+  <section>
+    <h2>Как проходит установка</h2>
+    <ol>
+      <li>Нажмите «Установить прошивку».</li>
+      <li>Выберите COM-порт прибора в диалоге браузера. Порт выбирается вручную; у платы два USB-разъёма, начните с того, который система видит как CH340.</li>
+      <li>Дождитесь конца записи — диалог показывает ход. После записи прибор перезагружается сам; если вы входили в режим загрузчика вручную и прибор остался в нём, нажмите RESET.</li>
+    </ol>
+  </section>
+
+  <section class="panel warn">
+    <h2>Настройки и пресеты при перепрошивке теряются</h2>
+    <p>Объединённый образ записывается подряд от адреса 0x0 и перекрывает область NVS, где хранятся настройки и пресеты. После прошивки прибор включается с заводскими значениями. Галочка стирания в диалоге на это не влияет: NVS закрывается образом и без неё.</p>
+    <p>Полное стирание дополнительно очищает раздел <code>storage</code> с файлами; их заливают заново через <code>tools/upload_fs.ps1</code>.</p>
+  </section>
+
+  <section>
+    <h2>Если не работает</h2>
+    <ul>
+      <li>Кнопки нет, вместо неё «браузер не поддерживает Web Serial» — откройте страницу в Chrome или Edge на компьютере.</li>
+      <li>Порт не открывается или не виден в списке — его держит другая программа либо выбран не тот COM-порт. Закройте монитор порта, отключите и подключите прибор, попробуйте снова.</li>
+      <li>Прибор не отвечает на запрос — попробуйте второй USB-разъём и другой кабель.</li>
+      <li>Прибор не запускается после прошивки — проверьте ту же прошивку из командной строки: <code>pwsh -File tools/idf.ps1 -p COM7 flash</code>. Браузер и командная строка записывают один и тот же набор файлов по одним и тем же адресам из <code>build/flash_args</code>.</li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <h2>Что записывается</h2>
+    <table>
+      <thead><tr><th>Адрес</th><th>Часть</th></tr></thead>
+      <tbody>
+        <tr><td>0x0</td><td>загрузчик — <code>bootloader/bootloader.bin</code></td></tr>
+        <tr><td>0x8000</td><td>таблица разделов — <code>partition_table/partition-table.bin</code></td></tr>
+        <tr><td>0xf000</td><td>данные OTA — <code>ota_data_initial.bin</code></td></tr>
+        <tr><td>0x20000</td><td>приложение — <code>guition_knob.bin</code></td></tr>
+      </tbody>
+    </table>
+    <p class="meta">Эти файлы склеены в один <code>firmware/OBOD.bin</code>, он записывается с адреса 0. После очередной сборки прошивки образ пересобирается командой <code>pwsh -File tools/webflash/merge.ps1</code>, тогда же обновляется версия в манифесте.</p>
+  </section>
+
+  <footer>
+    <p>Запись выполняет esp-web-tools 10.4.0 (подключается с unpkg). Страницу отдаёт <code>tools/webflash/serve.ps1</code>. Чип: ESP32-S3.</p>
+  </footer>
+
+</main>
+
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<script>
+  // Версия, размер и хеш — из манифеста: он собран из самого образа, поэтому
+  // страница не расходится с тем, что лежит рядом. Заголовок ответа для этого
+  // не годится — служебный сервер может отдать сжатый поток, и Content-Length
+  // описал бы не файл. Если размер не записан, строка просто короче.
+  (async function () {
+    var verEl = document.getElementById('ver');
+    var metaEl = document.getElementById('meta');
+    var manifest;
+    try {
+      manifest = await fetch('manifest.json', { cache: 'no-store' }).then(function (r) { return r.json(); });
+      verEl.textContent = manifest.version;
+    } catch (e) {
+      verEl.textContent = 'не прочитана';
+      return;
+    }
+    var image = manifest.image || {};
+    if (image.size) {
+      metaEl.insertAdjacentHTML('beforeend', ' Размер: ' + Number(image.size).toLocaleString('ru-RU') + ' байт.');
+    }
+    if (image.sha256) {
+      metaEl.insertAdjacentHTML('beforeend', ' SHA-256: <code>' + image.sha256 + '</code>.');
+    }
+  })();
+</script>
+</body>
+</html>

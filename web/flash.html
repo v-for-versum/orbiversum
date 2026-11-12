@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/docs.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<title>OBOD — Прошивка</title>
+<!--
+  Раздел «Прошивка», разложенный по трём вкладкам: «Из браузера», «Командой» и «Что
+   теряется».
+
+  Кнопку и диалог записи рисует esp-web-tools: тот же модуль, что использует страница
+  tools/webflash. Подпись к образу собирается из манифеста, который указан у самой кнопки,
+  поэтому путь к манифесту задан в одном месте — в разметке ниже. Отсюда, из папки web/,
+  манифест лежит в ../tools/webflash/manifest.json; образ указан в манифесте как
+  firmware/OBOD.bin и отсчитывается от самого манифеста.
+
+  У копии этой страницы на сайте путь к манифесту — manifest.json: образ и манифест лежат
+  в той же папке.
+
+  Заполнение #flash-meta открывает файл запросом, а по file:// браузер соседние файлы
+  читать не даёт: тогда в подписи остаётся путь к манифесту. Это ожидаемо и не мешает
+  самой записи — её делает esp-web-tools.
+-->
+</head>
+
+<body>
+
+<a class="skip" href="#main">К содержимому</a>
+
+<header class="topbar">
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Разделы</button>
+  <a class="brand" href="index.html">OBOD</a>
+  <nav class="crumbs" id="crumbs" aria-label="Хлебные крошки"></nav>
+</header>
+
+<div class="shell">
+
+  <nav class="sidebar" id="sidebar" aria-label="Разделы документации">
+    <div class="sidebar-head">
+      <p class="sidebar-title">Документация</p>
+      <button class="nav-close" type="button">Закрыть</button>
+    </div>
+    <div id="tree"></div>
+  </nav>
+
+  <div class="backdrop" id="backdrop" hidden></div>
+
+  <main class="content" id="main">
+
+    <p class="kicker">Раздел</p>
+    <h1>Прошивка</h1>
+
+    <p class="lead">Новая версия записывается по USB: из браузера или командой.</p>
+
+    <p>Основной способ — прямо из браузера: страница сама
+      передаёт прибору готовый образ, командная строка и Python не нужны. Ниже — то же
+      самое командой, для тех случаев, когда браузерная запись не подходит.</p>
+
+    <div class="note">
+      <p><b>Прошивка только для Guition Knob JC3636K718C.</b> Это плата с круглым
+        экраном 360 × 360 и энкодером-ободом. На других устройствах образ не заработает,
+        а запись на них может сделать плату нерабочей: разметка памяти, распиновка и
+        экран у чужих плат свои. За последствия записи на другое устройство
+        ответственности не несём.</p>
+      <p>Микросхема, память, экран, кольцо и питание этой платы — в разделе
+        <a href="hw.html">«Железо»</a>.</p>
+    </div>
+
+    <div class="tabset" data-tabset="pages">
+
+      <div class="tabs" role="tablist">
+        <button class="tab" type="button" role="tab" data-tab="browser" aria-selected="true"><span class="tab-name">Из браузера</span></button>
+        <button class="tab" type="button" role="tab" data-tab="command" aria-selected="false" tabindex="-1"><span class="tab-name">Командой</span></button>
+        <button class="tab" type="button" role="tab" data-tab="lost" aria-selected="false" tabindex="-1"><span class="tab-name">Что теряется</span></button>
+      </div>
+
+      <div class="panels">
+
+        <div class="panel flash" role="tabpanel" data-panel="browser" id="flash">
+          <h2>Из браузера</h2>
+
+          <esp-web-install-button manifest="../tools/webflash/manifest.json">
+            <button slot="activate" class="btn" type="button">Установить прошивку</button>
+            <span slot="unsupported">Браузер не поддерживает Web Serial. Откройте страницу
+              в Chrome или Edge на компьютере.</span>
+            <span slot="not-allowed">Страница открыта не по защищённому адресу: запись
+              работает только по https или на localhost.</span>
+          </esp-web-install-button>
+
+          <p id="flash-meta">Образ: ../tools/webflash/firmware/OBOD.bin.</p>
+
+          <p class="whats-new"><a href="changelog.html#v1.2.1">Что нового в 1.2.1</a> —
+            разделы и пункты этого выпуска, а также история предыдущих версий.</p>
+
+          <h3>Что нужно</h3>
+
+          <ul>
+            <li>Chrome или Edge на компьютере. Firefox, Safari и браузеры телефонов Web Serial
+              не поддерживают — кнопки на них не будет.</li>
+            <li>Прибор подключён кабелем и виден системе как COM-порт.</li>
+            <li>Порт свободен: закройте монитор порта и всё остальное, что его держит.</li>
+            <li>Приём нот выключен. Если на странице OPTIONS включён <b>MIDI IN</b>, разъём отдан
+              MIDI-интерфейсу и COM-порта нет: выключите приём, перезагрузите прибор — порт снова
+              станет отладочным.</li>
+          </ul>
+
+          <h3>Если прибор не отвечает</h3>
+
+          <p><b>При первой прошивке может понадобиться войти в режим загрузчика.</b> Это
+            встроенный в чип ПЗУ-загрузчик ESP32-S3: он принимает прошивку по последовательному
+            порту и работает независимо от того, что записано во флеш-памяти. Обычно программа
+            записи переводит чип в этот режим сама — по линиям DTR и RTS USB-UART-моста
+            или своей последовательностью сброса на встроенном USB-Serial-JTAG. Но на
+            первом включении, когда прошивки ещё нет, после её стирания или падения,
+            а также на порту USB-Serial-JTAG, где нет линий автосброса, этот путь может не
+            сработать: чип попробует загрузиться как обычно, и запись не начнётся. В журнале
+            esptool при этом видно, что чип не отвечает или отвечает не в том режиме;
+            браузерная страница просто не находит устройство.</p>
+
+          <p>Тогда зажмите кнопку <b>BOOT</b> и, не отпуская, подключите кабель — или нажмите
+            <b>RESET</b>, если кабель уже подключён. Дождитесь, пока система увидит порт,
+            и отпустите BOOT. <b>BOOT</b> — это вывод GPIO0, вывод начальной конфигурации:
+            чип читает его состояние при сбросе и по нему выбирает режим загрузчика. После
+            записи нажмите RESET или передёрните питание, иначе прибор останется в режиме
+            загрузчика.</p>
+
+          <p>GPIO0 — ещё и линия данных светодиодного кольца, поэтому при зажатом BOOT
+            кольцо может вести себя странно. На запись это не влияет: состояние вывода
+            читается только при сбросе.</p>
+        </div>
+
+        <div class="panel" role="tabpanel" data-panel="command" hidden>
+          <h2>Командой</h2>
+
+          <h3>Другие способы</h3>
+
+          <table>
+            <tr>
+              <td>Из командной строки</td>
+              <td><code>pwsh -File tools/idf.ps1 -p COM4 flash</code> — записывает загрузчик,
+                таблицу разделов, данные OTA и приложение, каждое по своему адресу. Настройки и
+                пресеты остаются на месте, менять формат разделов не нужно.</td>
+            </tr>
+            <tr>
+              <td>Только приложение</td>
+              <td><code>idf.py -p COM4 app-flash</code> — когда загрузчик и таблица разделов уже
+                на месте. Перезаписывает один раздел приложения, это заметно быстрее полной
+                прошивки.</td>
+            </tr>
+            <tr>
+              <td>Склеенный образ</td>
+              <td><code>esptool.py -p COM4 write_flash 0x0 tools/webflash/firmware/OBOD.bin</code> —
+                один файл от нулевого адреса. Так пишет и браузерная страница: загрузчик, таблица
+                разделов, данные OTA и приложение подряд. Настройки при этом стираются.</td>
+            </tr>
+            <tr>
+              <td>Свежий образ и своя страница</td>
+              <td><code>pwsh -File tools/webflash/merge.ps1</code> склеивает четыре части в один
+                файл и пересчитывает манифест, <code>pwsh -File tools/webflash/serve.ps1</code>
+                поднимает страницу записи локально. Годится, когда браузерная прошивка нужна без
+                выхода в сеть или на свежей сборке.</td>
+            </tr>
+            <tr>
+              <td>Журнал после прошивки</td>
+              <td><code>pwsh -File tools/capture_boot.ps1 -Port COM4 -Seconds 18</code> — пишет
+                загрузку в файл: видно версию, состояние пресетов, нагрузку и уровень батареи.</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="panel" role="tabpanel" data-panel="lost" hidden>
+          <h2>Что теряется</h2>
+
+          <div class="note">
+            <p><b>При этой прошивке пресеты и настройки теряются.</b> Образ записывается
+              целиком, от нулевого адреса, и закрывает область памяти, где лежат настройки и
+              пресеты: прибор включится с заводскими значениями. Галочка стирания в диалоге на
+              это не влияет. Запишите нужные звуки заранее. Прошивка из командной строки,
+              описанная ниже, настройки сохраняет.</p>
+          </div>
+
+          <p class="muted">Хранение звука, слоты и то, как пресеты переживают смену прошивки,
+            описаны на странице <a href="ref-preset.html">«Пресеты»</a>. Полное стирание при
+            необходимости делается отдельно, командой <code>esptool erase-flash</code>.</p>
+        </div>
+
+      </div>
+    </div>
+
+    <nav class="pager" id="pager" aria-label="Соседние страницы"></nav>
+  </main>
+
+  <aside class="toc" aria-label="На этой странице">
+    <p class="toc-title">На этой странице</p>
+    <ul id="toc-list"></ul>
+  </aside>
+
+</div>
+
+<footer class="footer">
+  <p><b>OBOD</b> — дрон-синтезатор на ESP32-S3 с круглым экраном 360 × 360. 83 параметра,
+    22 страницы, 128 пресетов.</p>
+  <p>Начало работы — <a href="start.html">с чего начать</a>. Жесты и обод — на странице
+    <a href="ui.html">«Управление»</a>, обновление прибора — на странице
+    <a href="flash.html">«Прошивка»</a>, точные технические подробности — в разделе
+    <a href="under.html">«Под капотом»</a>.</p>
+  <p>Движок голосов — <a href="https://github.com/danilogcrf2-oss/ESP32Synth">ESP32Synth 2.5.0</a>
+    (MIT, © 2025 Danilo Gabriel). Остальное написано для этого прибора.</p>
+</footer>
+
+<script src="assets/pages.js"></script>
+<script src="assets/docs.js"></script>
+
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<script>
+  var btn = document.querySelector('#flash esp-web-install-button');
+  var meta = document.getElementById('flash-meta');
+  if (btn && meta) {
+    var manifest = btn.getAttribute('manifest');
+    /* Размер и хеш берутся из манифеста, а не из заголовка ответа на HEAD:
+       GitHub Pages отдаёт образ сжатым, и Content-Length описывает поток, а не
+       файл — страница показывала 701 697 байт вместо 1 176 144. Манифест
+       собирает tools/webflash/merge.ps1 из самого образа, поэтому число на
+       странице совпадает с числом скачанных байт. */
+    fetch(manifest)
+      .then(function (r) { return r.json(); })
+      .then(function (m) {
+        var part = m.builds[0].parts[0];
+        var image = m.image || {};
+        var line = 'Образ ' + (image.path || part.path) + ', версия ' + m.version;
+        if (image.size) {
+          line += ', ' + Number(image.size).toLocaleString('ru-RU') + ' байт';
+        }
+        if (image.sha256) {
+          var h = String(image.sha256);
+          line += ', SHA-256 ' + h.slice(0, 8) + '…' + h.slice(-8);
+        }
+        meta.textContent = line + '.';
+        if (image.sha256) {
+          meta.setAttribute('title', 'SHA-256: ' + image.sha256);
+        }
+      })
+      .catch(function () {
+        meta.textContent = 'Образ: ' + manifest + '.';
+      });
+  }
+</script>
+
+</body>
+</html>
