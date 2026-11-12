@@ -1,6 +1,6 @@
 //! RBJ cookbook biquads (transposed direct form II).
 
-use crate::fast::{cos as cosf, sin as sinf};
+use crate::fast::sin_cos_0_pi;
 
 pub struct Biquad {
     sr: f32,
@@ -25,8 +25,8 @@ impl Biquad {
     fn trig(&self, hz: f32) -> (f32, f32) {
         let hz = hz.clamp(1.0, self.sr * 0.49);
         let w0 = 2.0 * core::f32::consts::PI * hz * self.inv_sr;
-        let alpha = sinf(w0) * self.inv_2q;
-        (cosf(w0), alpha)
+        let (sn, cs) = sin_cos_0_pi(w0);
+        (cs, sn * self.inv_2q)
     }
 
     #[inline(always)]

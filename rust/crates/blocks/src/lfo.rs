@@ -1,7 +1,7 @@
 //! Slow control-rate-style generators: Noise0, Noise1, VarLagSine.
 
 use crate::rng::Rng;
-use crate::fast::{self, cos as cosf};
+use crate::fast::{self, sin_cos_0_pi};
 
 /// Stepped random (LFNoise0): new value in -1..1 `hz` times per second.
 pub struct Noise0 {
@@ -90,7 +90,7 @@ impl VarLagSine {
         if self.pos < 1.0 {
             let step = if time_s > 0.0 { fast::recip(time_s * self.sr) } else { 1.0 };
             self.pos = (self.pos + step).min(1.0);
-            let w = 0.5 - 0.5 * cosf(self.pos * core::f32::consts::PI);
+            let w = 0.5 - 0.5 * sin_cos_0_pi(self.pos * core::f32::consts::PI).1;
             self.value = self.start + (self.target - self.start) * w;
         } else {
             self.value = self.target;

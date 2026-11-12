@@ -1,12 +1,13 @@
 //! Equal-power stereo panning (SC Pan2).
 
-use crate::fast::{cos as cosf, sin as sinf};
+use crate::fast::sin_cos_0_pi;
 
 /// `pos` -1 (left) .. 1 (right).
 #[inline(always)]
 pub fn pan2(x: f32, pos: f32) -> [f32; 2] {
     let a = (pos.clamp(-1.0, 1.0) + 1.0) * core::f32::consts::FRAC_PI_4;
-    [x * cosf(a), x * sinf(a)]
+    let (sn, cs) = sin_cos_0_pi(a);
+    [x * cs, x * sn]
 }
 
 #[cfg(test)]

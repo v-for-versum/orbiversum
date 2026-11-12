@@ -63,6 +63,27 @@ pub fn sin(x: f32) -> f32 {
     p * (1.0 - 2.0 * odd)
 }
 
+/// (sin x, cos x) for x in [0, pi] (clamped), sharing one reduction; no float->int casts.
+/// Error ~1e-7. Used for filter coefficients and pan/crossfade shapes.
+#[inline(always)]
+pub fn sin_cos_0_pi(x: f32) -> (f32, f32) {
+    let x = x.clamp(0.0, core::f32::consts::PI);
+    // fold onto [0, pi/2]: sin(pi - x) = sin x, cos(pi - x) = -cos x
+    let hi = (x > core::f32::consts::FRAC_PI_2) as u8 as f32;
+    let r = x + hi * (core::f32::consts::PI - 2.0 * x);
+    let r2 = r * r;
+    let s = r
+        * (1.0
+            + r2 * (-0.166_666_67
+                + r2 * (8.333_329_3e-3 + r2 * (-1.984_087_4e-4 + r2 * (2.752_556_2e-6 - 2.388_985_9e-8 * r2)))));
+    // Taylor to x^12: truncation 6e-9 at pi/2
+    let c = 1.0
+        + r2 * (-0.5
+            + r2 * (4.166_666_7e-2
+                + r2 * (-1.388_888_9e-3 + r2 * (2.480_158_7e-5 + r2 * (-2.755_731_9e-7 + r2 * 2.087_675_7e-9)))));
+    (s, c * (1.0 - 2.0 * hi))
+}
+
 /// cos(x), x in radians.
 #[inline(always)]
 pub fn cos(x: f32) -> f32 {
@@ -111,6 +132,17 @@ mod tests {
             let (a, b) = (exp(x * 0.2), libm::expf(x * 0.2));
             assert!(((a - b) / b).abs() < 2e-5, "exp {x}");
             x += 0.0173;
+        }
+    }
+
+    #[test]
+    fn sin_cos_0_pi_matches_libm() {
+        let mut x = 0.0f32;
+        while x <= core::f32::consts::PI {
+            let (s, c) = sin_cos_0_pi(x);
+            assert!((s - libm::sinf(x)).abs() < 3e-7, "sin {x}");
+            assert!((c - libm::cosf(x)).abs() < 3e-7, "cos {x}");
+            x += 0.0031;
         }
     }
 

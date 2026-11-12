@@ -51,6 +51,11 @@ struct Lane {
     pan_noise: Noise0,
     pan_lag: VarLagSine,
     gain: [f32; 2],
+    /// (o1, o2) the cached `ratio` belongs to (NaN = none)
+    oct: (f32, f32),
+    ratio: f32,
+    /// pan position the cached `gain` belongs to (NaN = none)
+    pan_c: f32,
 }
 
 fn child_rng(rng: &mut Rng) -> Rng {
@@ -86,6 +91,9 @@ impl Lane {
             pan_noise: Noise0::new(child_rng(rng), sr),
             pan_lag: VarLagSine::new(sr),
             gain: [core::f32::consts::FRAC_1_SQRT_2; 2],
+            oct: (f32::NAN, f32::NAN),
+            ratio: 1.0,
+            pan_c: f32::NAN,
         }
     }
 
@@ -93,7 +101,12 @@ impl Lane {
         let c = CTRL as f32;
         let o1 = blocks::fast::floor(self.tri1.tick(self.f_tri1 * c) + 1.0);
         let o2 = blocks::fast::floor(self.tri2.tick(self.f_tri2 * c) + 1.0);
-        self.saw_hz = (hz * exp2f((4.0 * o1 + 5.0 * o2) * (1.0 / 12.0))).min(max_hz);
+        // The octave/fifth steps change rarely: recompute the ratio only when they do.
+        if o1 != self.oct.0 || o2 != self.oct.1 {
+            self.oct = (o1, o2);
+            self.ratio = exp2f((4.0 * o1 + 5.0 * o2) * (1.0 / 12.0));
+        }
+        self.saw_hz = (hz * self.ratio).min(max_hz);
         let s = self.lpf_lfo.tick(self.f_lpf * c);
         self.lpf.set_lowpass(20.0 * pow_k(LOG2_600, (s + 1.0) * 0.5));
         self.delay_s = (0.02 + 0.01 * self.dly_noise.tick(self.f_dly * c)) * (1.0 / 15.0);
@@ -101,7 +114,11 @@ impl Lane {
         self.saw.set_hz(self.saw_hz);
         let p = self.pan_noise.tick(PAN_RATE * c);
         let p = self.pan_lag.tick(p, 3.0 / c);
-        self.gain = pan2(1.0, p);
+        // pan is constant between the noise steps: recompute the gains only on change
+        if p != self.pan_c {
+            self.pan_c = p;
+            self.gain = pan2(1.0, p);
+        }
     }
 }
 
@@ -259,7 +276,7 @@ impl Voice for Starlids {
             pb.mark(prof::MIX);
             let cut = self.moog_cut;
             for j in 0..n {
-                let y = self.moog.tick([tanh(l[j]), tanh(r[j])], cut, 0.0);
+                let y = self.moog.tick([l[j], r[j]], cut, 0.0);
                 l[j] = y[0];
                 r[j] = y[1];
             }
