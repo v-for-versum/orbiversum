@@ -40,7 +40,7 @@ const OUT_TRIM: f32 = 0.6;
 /// Sacrifice switches for the CPU budget (flipped by hand after a measurement).
 /// Reverb on the mono sum (one channel's lines) with the same wet on both channels.
 const REVERB_SINGLE_CHANNEL: bool = true;
-const KLANK_ENABLED: bool = true;
+const KLANK_ENABLED: bool = false;
 const REVERB_MIX: f32 = 0.45;
 const KLANK_DECAY: f32 = 1.0;
 const KLANK_EXCITE: f32 = 0.004;
