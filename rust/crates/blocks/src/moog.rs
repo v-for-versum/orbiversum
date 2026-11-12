@@ -5,6 +5,8 @@ use libm::expf;
 
 pub struct MoogLadder {
     sr: f32,
+    /// oversampling passes per tick (1 or 2)
+    passes: usize,
     s: [f32; 4],
     last: f32,
     /// tanh of each stage state, kept in sync with `s`
@@ -17,7 +19,13 @@ pub struct MoogLadder {
 
 impl MoogLadder {
     pub fn new(sr: f32) -> MoogLadder {
-        MoogLadder { sr, s: [0.0; 4], last: 0.0, ts: [0.0; 4], cached_cutoff: f32::NAN, tune: 0.0, acr: 0.0 }
+        MoogLadder::with_oversample(sr, 2)
+    }
+
+    /// `passes` ladder iterations per tick (1 = no oversampling, cheaper).
+    pub fn with_oversample(sr: f32, passes: usize) -> MoogLadder {
+        let passes = passes.clamp(1, 2);
+        MoogLadder { sr, passes, s: [0.0; 4], last: 0.0, ts: [0.0; 4], cached_cutoff: f32::NAN, tune: 0.0, acr: 0.0 }
     }
 
     /// `res` 0..4; clamped to 3.8 so the ladder always rings out instead of
@@ -27,7 +35,7 @@ impl MoogLadder {
             let fc = (cutoff_hz / self.sr).clamp(0.0005, 0.45);
             let fcr = 1.8730 * fc * fc * fc + 0.4955 * fc * fc - 0.6490 * fc + 0.9988;
             self.acr = -3.9364 * fc * fc + 1.8409 * fc + 0.9968;
-            self.tune = 1.0 - expf(-2.0 * core::f32::consts::PI * (fc * 0.5) * fcr);
+            self.tune = 1.0 - expf(-2.0 * core::f32::consts::PI * (fc / self.passes as f32) * fcr);
             self.cached_cutoff = cutoff_hz;
         }
         let (tune, acr) = (self.tune, self.acr);
@@ -36,7 +44,7 @@ impl MoogLadder {
         // computed after a stage update is exactly the next step's `t`.
         // With res == 0 the input is the same on both passes: one tanh.
         let mut tin = if res4 == 0.0 { tanh(x) } else { 0.0 };
-        for _ in 0..2 {
+        for _ in 0..self.passes {
             if res4 != 0.0 {
                 tin = tanh(x - res4 * self.last);
             }
@@ -106,6 +114,17 @@ mod tests {
     #[test]
     fn matches_reference_res_positive() {
         compare(1.5, 5e-3);
+    }
+
+    #[test]
+    fn single_pass_stable_at_high_resonance() {
+        let mut f = MoogLadder::with_oversample(48000.0, 1);
+        let mut y = f.tick(1.0, 1000.0, 3.99);
+        for i in 1..96000 {
+            y = f.tick(0.0, 1000.0, 3.99);
+            assert!(y.is_finite(), "NaN/inf at {i}");
+        }
+        assert!(y.abs() < 1e-3, "not decaying: {y}");
     }
 
     #[test]

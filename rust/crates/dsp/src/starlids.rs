@@ -139,7 +139,7 @@ impl Starlids {
             moog_lag_noise: Noise0::new(child_rng(&mut rng), sr),
             moog_lag: VarLagSine::new(sr),
             moog_cut: 880.0,
-            moog: [MoogLadder::new(sr), MoogLadder::new(sr)],
+            moog: [MoogLadder::with_oversample(sr, 1), MoogLadder::with_oversample(sr, 1)],
             hpf: [
                 Biquad::highpass(sr, 20.0, Q_BUTTERWORTH),
                 Biquad::highpass(sr, 20.0, Q_BUTTERWORTH),
