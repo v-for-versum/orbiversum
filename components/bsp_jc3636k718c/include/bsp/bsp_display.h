@@ -114,11 +114,13 @@ esp_err_t bsp_display_rotation_set(uint8_t rotation);
 
 /*
  * Hand the panel to the application. LVGL stays attached (touch and encoder are
- * LVGL input devices and need it) but is stopped with lvgl_port_stop(), so it never
- * flushes again; its io "colour transfer done" callback is replaced by one that
- * releases bsp_display_draw_rect(). Call once, after bsp_init(), from one task.
- * The panel keeps whatever LVGL last drew (a black screen) until the application
- * draws over it.
+ * LVGL input devices and need it) but its timers are disabled with lvgl_port_stop()
+ * (under the LVGL lock), so it never renders or flushes again. The LVGL TASK keeps
+ * running (1 kHz loop, takes the LVGL lock, reads input devices); the touch and
+ * encoder samplers do not depend on it. The io "colour transfer done" callback is
+ * replaced by one that releases bsp_display_draw_rect(). Call once, after bsp_init(),
+ * from one task. The panel keeps whatever LVGL last drew (a black screen) until the
+ * application draws over it.
  */
 esp_err_t bsp_display_raw_begin(void);
 
@@ -129,6 +131,10 @@ esp_err_t bsp_display_raw_begin(void);
  * CONFIG_BSP_LCD_BUFFER_LINES * 2 bytes). Returns when the transfer has finished,
  * so the buffer can be reused at once. One caller at a time, after
  * bsp_display_raw_begin().
+ *
+ * ESP_ERR_TIMEOUT means the transfer did not finish in 100 ms and may still be reading
+ * `rgb565`: do not reuse or free that buffer. Later calls return ESP_ERR_INVALID_STATE
+ * until the late completion arrives.
  */
 esp_err_t bsp_display_draw_rect(int x, int y, int w, int h, const uint16_t *rgb565);
 

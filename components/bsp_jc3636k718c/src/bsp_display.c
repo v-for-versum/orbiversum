@@ -15,6 +15,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
@@ -553,6 +554,8 @@ esp_err_t bsp_display_deinit(void)
 
 static SemaphoreHandle_t s_raw_done;
 static bool              s_raw;
+/* A draw_rect timed out: its transfer may still be reading the caller's buffer. */
+static bool              s_raw_pending;
 
 static bool raw_trans_done_cb(esp_lcd_panel_io_handle_t io,
                               esp_lcd_panel_io_event_data_t *edata, void *user)
@@ -571,17 +574,45 @@ esp_err_t bsp_display_raw_begin(void)
     if (!s_disp || !s_io) {
         return ESP_ERR_INVALID_STATE;
     }
-    s_raw_done = xSemaphoreCreateBinary();
-    if (!s_raw_done) {
+    SemaphoreHandle_t sem = xSemaphoreCreateBinary();
+    if (!sem) {
         return ESP_ERR_NO_MEM;
     }
-    /* Stop LVGL first so nothing is in flight when the callback is swapped. */
-    ESP_RETURN_ON_ERROR(lvgl_port_stop(), TAG, "lvgl_port_stop");
+
+    /* lvgl_port_stop() only disables LVGL's timers (refresh, indev read timers) and
+     * the tick: the LVGL task itself keeps looping at 1 kHz, taking the LVGL lock and
+     * reading input devices, but with no timer ready it never renders or flushes.
+     * Take the lock so the stop cannot land in the middle of a render/flush. */
+    if (!bsp_display_lock(1000)) {
+        vSemaphoreDelete(sem);
+        return ESP_ERR_TIMEOUT;
+    }
+    esp_err_t err = lvgl_port_stop();
+    bsp_display_unlock();
+    if (err != ESP_OK) {
+        vSemaphoreDelete(sem);
+        ESP_LOGE(TAG, "lvgl_port_stop: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    /* A flush LVGL started just before the stop may still be on the wire; its
+     * completion callback is the LVGL one, which is harmless. Let it finish (a 16-row
+     * strip takes well under 2 ms) before the callback is swapped, so its completion
+     * cannot land on the new callback and release the first draw_rect early. */
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    s_raw_done = sem;
     const esp_lcd_panel_io_callbacks_t cbs = { .on_color_trans_done = raw_trans_done_cb };
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_io_register_event_callbacks(s_io, &cbs, NULL),
-                        TAG, "register callbacks");
+    err = esp_lcd_panel_io_register_event_callbacks(s_io, &cbs, NULL);
+    if (err != ESP_OK) {
+        s_raw_done = NULL;
+        vSemaphoreDelete(sem);
+        ESP_LOGE(TAG, "register callbacks: %s", esp_err_to_name(err));
+        return err;
+    }
+    s_raw_pending = false;
     s_raw = true;
-    ESP_LOGI(TAG, "raw drawing on, LVGL stopped (max %u px per write)",
+    ESP_LOGI(TAG, "raw drawing on, LVGL timers stopped (max %u px per write)",
              (unsigned)bsp_display_raw_max_pixels());
     return ESP_OK;
 }
@@ -601,9 +632,21 @@ esp_err_t bsp_display_draw_rect(int x, int y, int w, int h, const uint16_t *rgb5
         (uint32_t)w * (uint32_t)h > bsp_display_raw_max_pixels()) {
         return ESP_ERR_INVALID_ARG;
     }
+    if (s_raw_pending) {
+        /* An earlier write timed out. Until its (late) completion arrives the DMA may
+         * still be reading that caller's buffer, so refuse to start another one. */
+        if (xSemaphoreTake(s_raw_done, 0) != pdTRUE) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        s_raw_pending = false;
+    } else {
+        /* No transfer is in flight: drop any stale completion. */
+        (void)xSemaphoreTake(s_raw_done, 0);
+    }
     ESP_RETURN_ON_ERROR(esp_lcd_panel_draw_bitmap(s_panel, x, y, x + w, y + h, rgb565),
                         TAG, "draw_bitmap");
     if (xSemaphoreTake(s_raw_done, pdMS_TO_TICKS(100)) != pdTRUE) {
+        s_raw_pending = true;
         return ESP_ERR_TIMEOUT;
     }
     return ESP_OK;
