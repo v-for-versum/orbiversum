@@ -1,21 +1,23 @@
 use dsp::starlids::Starlids;
 use dsp::voice::Voice;
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct Counting;
-static ALLOCS: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    /// Allocations made by the current thread (other test threads and the harness must not count).
+    static ALLOCS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-        ALLOCS.fetch_add(1, Ordering::SeqCst);
+        ALLOCS.with(|a| a.set(a.get() + 1));
         System.alloc(l)
     }
     unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
         System.dealloc(p, l)
     }
     unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
-        ALLOCS.fetch_add(1, Ordering::SeqCst);
+        ALLOCS.with(|a| a.set(a.get() + 1));
         System.realloc(p, l, n)
     }
 }
@@ -33,13 +35,13 @@ fn starlids_no_alloc_in_process() {
     v.set_params(110.0, 0.8);
     let mut buf = [[0.0f32; 2]; 256];
     v.process(&mut buf);
-    let before = ALLOCS.load(Ordering::SeqCst);
+    let before = ALLOCS.with(|a| a.get());
     for _ in 0..200 {
         v.process(&mut buf);
     }
     v.set_params(220.0, 0.5);
     v.process(&mut buf);
-    assert_eq!(ALLOCS.load(Ordering::SeqCst) - before, 0);
+    assert_eq!(ALLOCS.with(|a| a.get()) - before, 0);
 }
 
 #[test]
@@ -49,11 +51,12 @@ fn eno_no_alloc_in_process() {
     v.set_params(330.0, 0.8);
     let mut buf = [[0.0f32; 2]; 256];
     v.process(&mut buf);
-    let before = ALLOCS.load(Ordering::SeqCst);
-    for _ in 0..200 {
+    let before = ALLOCS.with(|a| a.get());
+    // 4 s of blocks after warm-up: covers the first plane switch (~3 s)
+    for _ in 0..(4 * 48_000 / 256 + 1) {
         v.process(&mut buf);
     }
     v.set_params(220.0, 0.5);
     v.process(&mut buf);
-    assert_eq!(ALLOCS.load(Ordering::SeqCst) - before, 0);
+    assert_eq!(ALLOCS.with(|a| a.get()) - before, 0);
 }

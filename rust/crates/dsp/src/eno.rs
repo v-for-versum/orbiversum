@@ -103,6 +103,8 @@ impl PadVoice {
 pub struct Eno {
     seed: u64,
     sr: f32,
+    /// control step in seconds (CTRL / sr), computed once
+    dt: f32,
     hz: f32,
     amp: f32,
     silent: bool,
@@ -154,6 +156,7 @@ impl Eno {
         let mut s = Eno {
             seed,
             sr,
+            dt: CTRL as f32 / sr,
             hz: 330.0,
             amp: 0.0,
             silent: false,
@@ -189,9 +192,15 @@ impl Eno {
         s
     }
 
+    /// Current plane semitone offsets (diagnostics and tests).
+    #[doc(hidden)]
+    pub fn plane_notes(&self) -> [i8; 4] {
+        self.plane_notes
+    }
+
     fn control(&mut self) {
         let c = CTRL as f32;
-        let dt = c / self.sr;
+        let dt = self.dt;
         let hz = self.hz;
         // plane trigger: Dust.kr(1/30) + Impulse.kr(0); both always advance
         let trig = self.dust.tick(1.0 / 30.0, dt) | self.impulse.tick(0.0, dt);

@@ -25,10 +25,24 @@ fn eno_seeds_differ() {
 
 #[test]
 fn eno_block_size_independence() {
-    let n = 3 * 48_000;
-    let base = render(7, 330.0, 0.8, n, 128);
+    // 8 s: the Impulse(0) trigger at t=0 plus TDelay 3 s switches the plane at ~3 s,
+    // so every chunking crosses a chord change.
+    let n = 8 * 48_000;
+    let run = |block: usize| {
+        let mut v = Eno::new(7, SR);
+        v.set_params(330.0, 0.8);
+        let mut out = vec![[0.0f32; 2]; n];
+        let before = v.plane_notes();
+        assert_eq!(before, [0; 4]);
+        for c in out.chunks_mut(block) {
+            v.process(c);
+        }
+        assert_ne!(v.plane_notes(), before, "plane must have switched (block {block})");
+        out
+    };
+    let base = run(128);
     for b in [1usize, 37, 1000] {
-        let o = render(7, 330.0, 0.8, n, b);
+        let o = run(b);
         for (k, (x, y)) in base.iter().zip(o.iter()).enumerate() {
             assert!((x[0] - y[0]).abs() <= 1e-6 && (x[1] - y[1]).abs() <= 1e-6, "block {b} sample {k}");
         }
