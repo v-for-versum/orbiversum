@@ -30,8 +30,8 @@ impl DelayC {
         self.buf.as_ptr().cast()
     }
 
-    pub fn tick(&mut self, x: f32, delay_s: f32) -> f32 {
-        self.buf[self.w] = x;
+    /// Sets the delay time; call when it changes (control rate), then use `tick_fixed`.
+    pub fn set_delay(&mut self, delay_s: f32) {
         if delay_s != self.delay_c {
             self.delay_c = delay_s;
             let mut d = (delay_s * self.sr).clamp(1.0, self.max_d);
@@ -43,14 +43,28 @@ impl DelayC {
             self.k = d as usize; // floor, d >= 1
             self.f = d - self.k as f32;
         }
-        let (k, f) = (self.k, self.f);
-        let (mask, w) = (self.mask, self.w);
-        let at = |delay: usize| self.buf[w.wrapping_sub(delay) & mask];
+    }
+
+    pub fn tick(&mut self, x: f32, delay_s: f32) -> f32 {
+        self.set_delay(delay_s);
+        self.tick_fixed(x)
+    }
+
+    /// Sample at the delay set by `set_delay`. No branches or bounds checks, so
+    /// several lines can be interleaved by the compiler.
+    #[inline(always)]
+    pub fn tick_fixed(&mut self, x: f32) -> f32 {
+        let (k, f, mask, w) = (self.k, self.f, self.mask, self.w);
+        debug_assert!(self.buf.len() == mask + 1 && w <= mask && k >= 1 && k + 2 <= mask);
+        let buf = self.buf.as_mut_ptr();
+        // SAFETY: buf.len() == mask + 1 (power of two), `w` and every masked index are <= mask.
+        let at = |delay: usize| unsafe { *buf.add(w.wrapping_sub(delay) & mask) };
+        unsafe { *buf.add(w) = x };
         let y0 = at(k - 1);
         let y1 = at(k);
         let y2 = at(k + 1);
         let y3 = at(k + 2);
-        self.w = (self.w + 1) & mask;
+        self.w = (w + 1) & mask;
         y1 + 0.5
             * f
             * ((y2 - y0) + f * ((2.0 * y0 - 5.0 * y1 + 4.0 * y2 - y3) + f * (3.0 * (y1 - y2) + y3 - y0)))

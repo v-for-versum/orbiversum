@@ -62,6 +62,7 @@ impl Biquad {
         self.set_coeffs(b, -(1.0 + c), b, 1.0 + alpha, -2.0 * c, 1.0 - alpha);
     }
 
+    #[inline(always)]
     pub fn tick(&mut self, x: f32) -> f32 {
         let y = self.b0 * x + self.z1;
         self.z1 = self.b1 * x - self.a1 * y + self.z2;

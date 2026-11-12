@@ -20,27 +20,40 @@ pub struct SawDpw {
     hz_c: f32,
     dx: f32,
     inv_2dx: f32,
+    /// 1.0 when the oscillator is stopped (output is x), else 0.0
+    flat: f32,
 }
 
 impl SawDpw {
     pub fn new(sr: f32) -> SawDpw {
-        SawDpw { sr, inv_sr: 1.0 / sr, x: 0.0, prev_sq: 0.0, hz_c: f32::NAN, dx: 0.0, inv_2dx: 0.0 }
+        SawDpw { sr, inv_sr: 1.0 / sr, x: 0.0, prev_sq: 0.0, hz_c: f32::NAN, dx: 0.0, inv_2dx: 0.0, flat: 0.0 }
+    }
+
+    /// Sets the pitch; call when it changes (control rate), then use `tick_fixed`.
+    pub fn set_hz(&mut self, hz: f32) {
+        if hz != self.hz_c {
+            self.hz_c = hz;
+            // dx < 2 keeps a single wrap enough (hz above ~0.99 sr is aliased noise anyway).
+            self.dx = (2.0 * hz.abs() * self.inv_sr).min(1.98);
+            let live = self.dx > 1e-9;
+            self.inv_2dx = if live { 0.5 * crate::fast::recip(self.dx) } else { 0.0 };
+            self.flat = if live { 0.0 } else { 1.0 };
+        }
     }
 
     pub fn tick(&mut self, hz: f32) -> f32 {
-        if hz != self.hz_c {
-            self.hz_c = hz;
-            self.dx = 2.0 * hz.abs() * self.inv_sr;
-            self.inv_2dx = if self.dx > 1e-9 { 0.5 * crate::fast::recip(self.dx) } else { 0.0 };
-        }
-        let dx = self.dx;
-        let mut x = self.x + dx;
-        if x >= 1.0 {
-            x -= 2.0 * libm::floorf((x + 1.0) * 0.5);
-        }
+        self.set_hz(hz);
+        self.tick_fixed()
+    }
+
+    /// Branch-free sample (hot loop): no calls, so the compiler can interleave several oscillators.
+    #[inline(always)]
+    pub fn tick_fixed(&mut self) -> f32 {
+        let mut x = self.x + self.dx;
+        x -= 2.0 * ((x >= 1.0) as u8 as f32);
         self.x = x;
         let sq = x * x;
-        let out = if dx > 1e-9 { (sq - self.prev_sq) * self.inv_2dx } else { x };
+        let out = (sq - self.prev_sq) * self.inv_2dx + x * self.flat;
         self.prev_sq = sq;
         out.clamp(-1.0, 1.0)
     }

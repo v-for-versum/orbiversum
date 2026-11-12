@@ -28,6 +28,8 @@ const LOG2_7_5: f32 = 2.906_890_6;
 
 const CTRL: usize = 32;
 const LANES: usize = 12;
+/// Lanes processed together in the hot loops (must divide LANES).
+const GROUP: usize = 4;
 const Q_BUTTERWORTH: f32 = core::f32::consts::FRAC_1_SQRT_2;
 /// Largest delay time reached: (0.02 + 0.01) / 15 s = 2 ms; margin added.
 const MAX_DELAY_S: f32 = 0.004;
@@ -95,6 +97,8 @@ impl Lane {
         let s = self.lpf_lfo.tick(self.f_lpf * c);
         self.lpf.set_lowpass(20.0 * pow_k(LOG2_600, (s + 1.0) * 0.5));
         self.delay_s = (0.02 + 0.01 * self.dly_noise.tick(self.f_dly * c)) * (1.0 / 15.0);
+        self.delay.set_delay(self.delay_s);
+        self.saw.set_hz(self.saw_hz);
         let p = self.pan_noise.tick(PAN_RATE * c);
         let p = self.pan_lag.tick(p, 3.0 / c);
         self.gain = pan2(1.0, p);
@@ -216,21 +220,29 @@ impl Voice for Starlids {
                 r[j] = sub;
             }
             pb.mark(prof::OTHER);
-            for (ln, buf) in self.lanes.iter_mut().zip(self.scratch.iter_mut()) {
-                for b in buf[..n].iter_mut() {
-                    *b = ln.saw.tick(ln.saw_hz);
+            // Lanes in groups of GROUP: the FPU chains of one lane are serial (and the
+            // core in-order), so interleaving independent lanes hides the latency.
+            for (lc, bc) in self.lanes.chunks_exact_mut(GROUP).zip(self.scratch.chunks_exact_mut(GROUP)) {
+                for j in 0..n {
+                    for q in 0..GROUP {
+                        bc[q][j] = lc[q].saw.tick_fixed();
+                    }
                 }
             }
             pb.mark(prof::SAW);
-            for (ln, buf) in self.lanes.iter_mut().zip(self.scratch.iter_mut()) {
-                for b in buf[..n].iter_mut() {
-                    *b = ln.lpf.tick(*b);
+            for (lc, bc) in self.lanes.chunks_exact_mut(GROUP).zip(self.scratch.chunks_exact_mut(GROUP)) {
+                for j in 0..n {
+                    for q in 0..GROUP {
+                        bc[q][j] = lc[q].lpf.tick(bc[q][j]);
+                    }
                 }
             }
             pb.mark(prof::LPF);
-            for (ln, buf) in self.lanes.iter_mut().zip(self.scratch.iter_mut()) {
-                for b in buf[..n].iter_mut() {
-                    *b = ln.delay.tick(*b, ln.delay_s) * gain;
+            for (lc, bc) in self.lanes.chunks_exact_mut(GROUP).zip(self.scratch.chunks_exact_mut(GROUP)) {
+                for j in 0..n {
+                    for q in 0..GROUP {
+                        bc[q][j] = lc[q].delay.tick_fixed(bc[q][j]) * gain;
+                    }
                 }
             }
             pb.mark(prof::DELAY);
