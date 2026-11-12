@@ -12,7 +12,8 @@ publish = false
 esp-idf-svc = "0.53"
 log = "0.4"
 board-jc3636k718c = { path = "../crates/board-jc3636k718c" }
-dsp = { path = "../crates/dsp" }
+os = { path = "../crates/os" }
+applets = { path = "../crates/applets" }
 
 [build-dependencies]
 embuild = "0.33"

@@ -14,3 +14,9 @@ CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 # driver". Nothing here calls the legacy API, so skip the check. Root cause
 # (why the legacy object is pulled in) is not investigated.
 CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y
+
+# UI (the Rust main task) runs on core 0; core 1 is reserved for the audio task
+# (priority 20). The board baseline pins main to core 1, where an audio task
+# that fills its core starves main and IDLE1.
+# CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1 is not set
+CONFIG_ESP_MAIN_TASK_AFFINITY_CPU0=y
