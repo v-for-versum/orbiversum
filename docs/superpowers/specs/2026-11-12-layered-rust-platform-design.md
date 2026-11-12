@@ -98,7 +98,8 @@ firmware-<board>        бинарник: выбирает плату и спи�
       `Adding pool of 7232K of PSRAM memory to heap allocator`), но дальше перезагрузочный цикл до `app_main`:
       `E (574) i2c: CONFLICT! driver_ng is not allowed to be used with this old driver` -> `abort() was called` -> `Rebooting...`.
       Строки `rust: bsp ok` нет. Причина: в образ попал старый I2C-драйвер IDF (`check_i2c_driver_conflict`), а BSP использует новый;
-      почему линкуется старый объект — не выяснено.
+      Причина по map-файлу (`libespidf.map`): `driver/libdriver.a(i2c.c.obj)` затянут символом `i2c_driver_delete` из
+      `libesp_idf_hal-*.rlib` (cgu esp-idf-hal, зависимость esp-idf-svc), т.е. старый драйвер приходит из Rust-стороны, а не из BSP.
     - Обход: `CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y` в `sdkconfig.defaults`; образ собирается, но НЕ проверен на плате:
       повторная прошивка не удалась (`Failed to connect to the device`), порт молчит, сброс по DTR/RTS не помогает.
       Вероятно нужен ручной вход в режим загрузки (BOOT + питание).
