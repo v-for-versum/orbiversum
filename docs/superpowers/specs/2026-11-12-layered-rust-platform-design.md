@@ -100,10 +100,14 @@ firmware-<board>        бинарник: выбирает плату и спи�
       Строки `rust: bsp ok` нет. Причина: в образ попал старый I2C-драйвер IDF (`check_i2c_driver_conflict`), а BSP использует новый;
       Причина по map-файлу (`libespidf.map`): `driver/libdriver.a(i2c.c.obj)` затянут символом `i2c_driver_delete` из
       `libesp_idf_hal-*.rlib` (cgu esp-idf-hal, зависимость esp-idf-svc), т.е. старый драйвер приходит из Rust-стороны, а не из BSP.
-    - Обход: `CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y` в `sdkconfig.defaults`; образ собирается, но НЕ проверен на плате:
-      повторная прошивка не удалась (`Failed to connect to the device`), порт молчит, сброс по DTR/RTS не помогает.
-      Вероятно нужен ручной вход в режим загрузки (BOOT + питание).
-    - Итог: `rust: bsp ok` и «нет перезагрузок» НЕ подтверждены; подтверждены только загрузка, определение PSRAM и сбой старого I2C.
+    - Обход: `CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y` в `sdkconfig.defaults`. Проверено на плате после перепрошивки
+      (захват 22 с после сброса, один `rst:` за весь лог, ни `abort`, ни `Rebooting`):
+      `I (385) esp_psram: Found 8MB PSRAM device`, `I (1152) bsp.display: ST77916 360x360 ready: QSPI 50 MHz, 16-line double buffer in internal RAM`,
+      `I (1585) firmware_jc3636k718c: rust: bsp ok`, `I (1588) firmware_jc3636k718c: rust: psram total = 7460780 bytes`,
+      затем `rust: alive` каждые 5 с (1595–21598 мс) и LVGL sysmon ~90 FPS. Работа более 20 с без перезагрузок.
+    - Итог: шаг 4 проверен: Rust-прошивка линкует C BSP, `bsp_init` из Rust проходит (display, touch, encoder), PSRAM определён.
+      Не проверено: энкодер/тач вручную, аудио (`bsp_audio_out_*` только слинкованы), длительная стабильность (>22 с).
+      Обход i2c — костыль; чистое решение (не тянуть старый драйвер через esp-idf-hal) не пробовалось.
 - Нагрузка на CPU тяжёлых дронов не измерена; оценки только по составу UGen.
 - Замеров FPS дисплея нет; требуется на срезе.
 - Скорость и поведение `fundsp` на Xtensa не проверены; Starlids планируется писать вручную (~150 строк).
