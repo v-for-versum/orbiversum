@@ -281,6 +281,13 @@ uint32_t bsp_touch_contact(void)
     return s_contact;
 }
 
+bool bsp_touch_get_live(uint16_t *x, uint16_t *y)
+{
+    if (x) { *x = s_live_x; }
+    if (y) { *y = s_live_y; }
+    return s_live_pressed;
+}
+
 bool bsp_touch_is_ready(void)
 {
     return s_touch != NULL;

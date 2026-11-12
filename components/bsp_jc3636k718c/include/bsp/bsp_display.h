@@ -108,6 +108,33 @@ void bsp_display_backlight_show(void);
  */
 esp_err_t bsp_display_rotation_set(uint8_t rotation);
 
+/* -------------------------------------------------------------------------- */
+/* Raw drawing (no LVGL)                                                      */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Hand the panel to the application. LVGL stays attached (touch and encoder are
+ * LVGL input devices and need it) but is stopped with lvgl_port_stop(), so it never
+ * flushes again; its io "colour transfer done" callback is replaced by one that
+ * releases bsp_display_draw_rect(). Call once, after bsp_init(), from one task.
+ * The panel keeps whatever LVGL last drew (a black screen) until the application
+ * draws over it.
+ */
+esp_err_t bsp_display_raw_begin(void);
+
+/*
+ * Blocking write of a w x h block at (x, y). `rgb565` holds the pixels row by row
+ * in PANEL byte order (high byte first in memory) and must be DMA-capable internal
+ * RAM. w * h * 2 must not exceed the SPI max transfer (BSP_LCD_H_RES *
+ * CONFIG_BSP_LCD_BUFFER_LINES * 2 bytes). Returns when the transfer has finished,
+ * so the buffer can be reused at once. One caller at a time, after
+ * bsp_display_raw_begin().
+ */
+esp_err_t bsp_display_draw_rect(int x, int y, int w, int h, const uint16_t *rgb565);
+
+/* Largest pixel count one bsp_display_draw_rect() call accepts. */
+uint32_t bsp_display_raw_max_pixels(void);
+
 #ifdef __cplusplus
 }
 #endif

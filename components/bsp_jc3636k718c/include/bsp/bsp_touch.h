@@ -48,6 +48,12 @@ lv_indev_t *bsp_touch_get_indev(void);
  */
 uint32_t bsp_touch_contact(void);
 
+/* Live finger state from the sampler: returns true while a finger is down. *x / *y
+ * (either may be NULL) receive the last known position, which stays valid after the
+ * release so a tap shorter than the caller's poll interval can still be located
+ * (detect it with bsp_touch_contact()). Raw panel coordinates, 0..359. */
+bool bsp_touch_get_live(uint16_t *x, uint16_t *y);
+
 /* -------------------------------------------------------------------------- */
 /* Runtime calibration                                                        */
 /* -------------------------------------------------------------------------- */

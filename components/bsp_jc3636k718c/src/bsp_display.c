@@ -13,6 +13,8 @@
 #include "driver/ledc.h"
 #include "driver/spi_master.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
@@ -542,5 +544,67 @@ esp_err_t bsp_display_deinit(void)
     lvgl_port_deinit();
 
     s_backlight_ready = false;
+    return ESP_OK;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Raw drawing (no LVGL)                                                      */
+/* -------------------------------------------------------------------------- */
+
+static SemaphoreHandle_t s_raw_done;
+static bool              s_raw;
+
+static bool raw_trans_done_cb(esp_lcd_panel_io_handle_t io,
+                              esp_lcd_panel_io_event_data_t *edata, void *user)
+{
+    (void)io; (void)edata; (void)user;
+    BaseType_t woken = pdFALSE;
+    xSemaphoreGiveFromISR(s_raw_done, &woken);
+    return woken == pdTRUE;
+}
+
+esp_err_t bsp_display_raw_begin(void)
+{
+    if (s_raw) {
+        return ESP_OK;
+    }
+    if (!s_disp || !s_io) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    s_raw_done = xSemaphoreCreateBinary();
+    if (!s_raw_done) {
+        return ESP_ERR_NO_MEM;
+    }
+    /* Stop LVGL first so nothing is in flight when the callback is swapped. */
+    ESP_RETURN_ON_ERROR(lvgl_port_stop(), TAG, "lvgl_port_stop");
+    const esp_lcd_panel_io_callbacks_t cbs = { .on_color_trans_done = raw_trans_done_cb };
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_io_register_event_callbacks(s_io, &cbs, NULL),
+                        TAG, "register callbacks");
+    s_raw = true;
+    ESP_LOGI(TAG, "raw drawing on, LVGL stopped (max %u px per write)",
+             (unsigned)bsp_display_raw_max_pixels());
+    return ESP_OK;
+}
+
+uint32_t bsp_display_raw_max_pixels(void)
+{
+    return (uint32_t)BSP_LCD_H_RES * CONFIG_BSP_LCD_BUFFER_LINES;
+}
+
+esp_err_t bsp_display_draw_rect(int x, int y, int w, int h, const uint16_t *rgb565)
+{
+    if (!s_raw) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!rgb565 || w <= 0 || h <= 0 || x < 0 || y < 0 ||
+        x + w > BSP_LCD_H_RES || y + h > BSP_LCD_V_RES ||
+        (uint32_t)w * (uint32_t)h > bsp_display_raw_max_pixels()) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_draw_bitmap(s_panel, x, y, x + w, y + h, rgb565),
+                        TAG, "draw_bitmap");
+    if (xSemaphoreTake(s_raw_done, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
     return ESP_OK;
 }
