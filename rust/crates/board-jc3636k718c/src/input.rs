@@ -95,6 +95,22 @@ impl InputFilter {
     }
 }
 
+/// Builds one snapshot from the three BSP reads. `contact` MUST be read before
+/// `live`: a finger landing between the two reads then shows up as "pressed with
+/// the old contact count" (picked up at the next poll with its new position),
+/// instead of "released at the old position with a new contact count", which the
+/// filter would report as a quick Tap at stale coordinates.
+pub fn sample(
+    steps: impl FnOnce() -> i32,
+    live: impl FnOnce() -> (bool, i16, i16),
+    contact: impl FnOnce() -> u32,
+) -> RawInput {
+    let steps = steps();
+    let contact = contact();
+    let (pressed, x, y) = live();
+    RawInput { steps, contact, pressed, x, y }
+}
+
 #[cfg(target_os = "espidf")]
 pub use device::JcInput;
 
@@ -109,15 +125,15 @@ mod device {
     }
 
     fn read() -> RawInput {
-        let (mut x, mut y) = (0u16, 0u16);
-        let pressed = unsafe { bsp_touch_get_live(&mut x, &mut y) };
-        RawInput {
-            steps: unsafe { bsp_encoder_get_steps() },
-            contact: unsafe { bsp_touch_contact() },
-            pressed,
-            x: x as i16,
-            y: y as i16,
-        }
+        sample(
+            || unsafe { bsp_encoder_get_steps() },
+            || {
+                let (mut x, mut y) = (0u16, 0u16);
+                let pressed = unsafe { bsp_touch_get_live(&mut x, &mut y) };
+                (pressed, x as i16, y as i16)
+            },
+            || unsafe { bsp_touch_contact() },
+        )
     }
 
     /// Polls the C BSP; call `poll` every UI tick.
@@ -148,6 +164,34 @@ mod tests {
     }
     fn drain(f: &mut InputFilter) -> alloc::vec::Vec<InputEvent> {
         core::iter::from_fn(|| f.next()).collect()
+    }
+
+    #[test]
+    fn touch_landing_between_the_two_reads_is_not_a_stale_tap() {
+        use core::cell::Cell;
+        // World: finger absent at (0,0), contact count 0. It lands at (10,10)
+        // right after the first touch read of the sample, whichever that is.
+        let reads = Cell::new(0u32);
+        let mut f = InputFilter::new(idle());
+        let raw = sample(
+            || 0,
+            || {
+                let landed = reads.get() >= 1;
+                reads.set(reads.get() + 1);
+                if landed { (true, 10, 10) } else { (false, 0, 0) }
+            },
+            || {
+                let landed = reads.get() >= 1;
+                reads.set(reads.get() + 1);
+                if landed { 1 } else { 0 }
+            },
+        );
+        f.update(0, raw);
+        assert!(drain(&mut f).is_empty(), "no event from a half-seen touch: {raw:?}");
+        // The next poll sees the whole touch: contact 1, pressed at (10,10).
+        f.update(16, RawInput { contact: 1, pressed: true, x: 10, y: 10, ..idle() });
+        f.update(40, RawInput { contact: 1, pressed: false, x: 10, y: 10, ..idle() });
+        assert_eq!(drain(&mut f), [InputEvent::Tap { x: 10, y: 10 }]);
     }
 
     #[test]

@@ -82,6 +82,8 @@ pub fn strips(r: Rect, max_pixels: usize) -> impl Iterator<Item = Rect> {
 /// Copies `r` out of the framebuffer into `out` in panel byte order (high
 /// byte first in memory, i.e. each little-endian `u16` byte-swapped).
 pub fn pack_strip(fb: &[u16], r: Rect, out: &mut [u16]) {
+    debug_assert!(r.x + r.w <= WIDTH && r.y + r.h <= HEIGHT, "strip outside the screen: {r:?}");
+    debug_assert!(out.len() >= r.pixels(), "strip buffer too small: {} < {}", out.len(), r.pixels());
     for (row, dst) in out.chunks_exact_mut(r.w).take(r.h).enumerate() {
         let start = (r.y + row) * WIDTH + r.x;
         for (d, s) in dst.iter_mut().zip(&fb[start..start + r.w]) {

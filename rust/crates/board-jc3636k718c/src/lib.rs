@@ -13,4 +13,4 @@ pub mod audio;
 #[cfg(target_os = "espidf")]
 mod jc;
 #[cfg(target_os = "espidf")]
-pub use jc::{BspPanel, JcBoard, JcDisplay};
+pub use jc::{BoardError, BspPanel, JcBoard, JcDisplay};

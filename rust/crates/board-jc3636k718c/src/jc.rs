@@ -12,14 +12,18 @@ pub struct BspPanel {
     buf: *mut u16,
 }
 
+fn alloc_strip() -> *mut u16 {
+    unsafe {
+        sys::heap_caps_malloc(STRIP_PIXELS * 2, sys::MALLOC_CAP_DMA | sys::MALLOC_CAP_INTERNAL | sys::MALLOC_CAP_8BIT)
+    } as *mut u16
+}
+
 impl BspPanel {
     /// Takes the panel from LVGL (`bsp_display_raw_begin`) and allocates the strip buffer.
     pub fn new() -> Result<BspPanel, esp_err_t> {
         let max = unsafe { bsp_display_raw_max_pixels() } as usize;
         assert!(STRIP_PIXELS <= max, "strip ({STRIP_PIXELS} px) exceeds the BSP transfer limit ({max} px)");
-        let buf = unsafe {
-            sys::heap_caps_malloc(STRIP_PIXELS * 2, sys::MALLOC_CAP_DMA | sys::MALLOC_CAP_INTERNAL | sys::MALLOC_CAP_8BIT)
-        } as *mut u16;
+        let buf = alloc_strip();
         if buf.is_null() {
             return Err(sys::ESP_ERR_NO_MEM);
         }
@@ -45,7 +49,36 @@ impl Panel for BspPanel {
     }
     fn send(&mut self, r: Rect) -> Result<(), i32> {
         let err = unsafe { bsp_display_draw_rect(r.x as i32, r.y as i32, r.w as i32, r.h as i32, self.buf) };
+        if err == sys::ESP_ERR_TIMEOUT {
+            // The transfer may still be reading `buf`: never touch it again (leak it)
+            // and continue with a fresh buffer.
+            let fresh = alloc_strip();
+            if !fresh.is_null() {
+                self.buf = fresh;
+            }
+        }
         if err == ESP_OK { Ok(()) } else { Err(err) }
+    }
+}
+
+/// Why `JcBoard::new` failed.
+#[derive(Debug)]
+pub enum BoardError {
+    Audio(AudioError),
+    /// Taking over the panel failed (raw `esp_err_t`).
+    Display(esp_err_t),
+}
+
+impl core::fmt::Display for BoardError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+impl std::error::Error for BoardError {}
+
+impl From<AudioError> for BoardError {
+    fn from(e: AudioError) -> BoardError {
+        BoardError::Audio(e)
     }
 }
 
@@ -59,8 +92,8 @@ pub struct JcBoard {
 
 impl JcBoard {
     /// Call after `bsp_init` (display, touch and encoder enabled).
-    pub fn new() -> Result<JcBoard, AudioError> {
-        let panel = BspPanel::new().map_err(AudioError::Backend)?;
+    pub fn new() -> Result<JcBoard, BoardError> {
+        let panel = BspPanel::new().map_err(BoardError::Display)?;
         Ok(JcBoard { audio: JcAudio::new()?, display: FbDisplay::new(panel), input: JcInput::new() })
     }
     pub fn display_mut(&mut self) -> &mut JcDisplay {

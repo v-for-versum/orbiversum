@@ -27,7 +27,6 @@ impl core::error::Error for AudioError {}
 
 pub type RenderFn = Box<dyn FnMut(&mut [[f32; 2]]) + Send>;
 
-/// Same shape as the minimal trait in `board-jc3636k718c` (migration deferred).
 pub trait AudioOut {
     /// Starts a realtime task that repeatedly calls `render` with stereo frames.
     fn start(&mut self, sr: u32, render: RenderFn) -> Result<(), AudioError>;
