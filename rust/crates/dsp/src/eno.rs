@@ -14,10 +14,11 @@ use blocks::{
     fast::{exp2, recip, tanh},
     lfo::{Noise0, Noise1, VarLagSine},
     moog::{MoogLadder, MoogStereo},
-    noise::Noise2,
+    noise::{Noise2, PinkNoise},
     osc::{Pulse, SawDpw, SinOsc},
     pan::pan2,
-    resonant::RLpf,
+    resonant::{RLpf, Ringz},
+    reverb::ReverbLite,
     rng::Rng,
     seq::{Dseq, Dust, Dxrand, Impulse, TChoose, TDelay},
 };
@@ -36,6 +37,18 @@ pub static ENO_NAMES: [&str; prof::SECTIONS] = ["control", "pad", "moog", "klank
 const CTRL: usize = 32;
 /// Output trim: the layers peak at ~1.56 at amp 1, which the i16 conversion would hard-clip.
 const OUT_TRIM: f32 = 0.6;
+/// Sacrifice switches for the CPU budget (flipped by hand after a measurement).
+/// Reverb on the mono sum with the same wet on both channels. Note: the current
+/// `ReverbLite` has no mono tick, so this saves no CPU until it gets one.
+const REVERB_SINGLE_CHANNEL: bool = false;
+const KLANK_ENABLED: bool = true;
+const REVERB_MIX: f32 = 0.45;
+const KLANK_DECAY: f32 = 1.0;
+const KLANK_EXCITE: f32 = 0.004;
+const KLANK_GAIN: f32 = 0.55;
+const INTRO_DELAY_S: f32 = 0.5;
+const INTRO_RAMP_S: f32 = 3.0;
+const HPF_HZ: f32 = 120.0;
 const VOICES: usize = 8;
 const GROUP: usize = 4;
 const GROUPS: usize = VOICES / GROUP;
@@ -186,6 +199,16 @@ pub struct Eno {
     perc_cut: f32,
     env_prev: f32,
     env_cur: f32,
+    // DynKlank: per channel 4 resonators on the current plane
+    klank: [[Ringz; 4]; 2],
+    klank_pink: [PinkNoise; 2],
+    klank_notes: [i8; 4],
+    klank_hz: f32,
+    // final chain
+    out_lpf: [Biquad; 2],
+    out_hpf: [Biquad; 2],
+    reverb: ReverbLite,
+    intro_pos: u32,
     // layer mix
     mix_noise: Noise0,
     mix_lfo: SinOsc,
@@ -217,6 +240,7 @@ impl Eno {
         let piano_noise_hz_n = Noise0::new(child_rng(&mut rng), sr);
         let noise2 = Noise2::new(child_rng(&mut rng), sr);
         let mix_noise = Noise0::new(child_rng(&mut rng), sr);
+        let klank_pink = [PinkNoise::new(child_rng(&mut rng)), PinkNoise::new(child_rng(&mut rng))];
         let mut s = Eno {
             seed,
             sr,
@@ -276,6 +300,15 @@ impl Eno {
             perc_cut: 495.0,
             env_prev: 0.0,
             env_cur: 0.0,
+            klank: [[Ringz::new(sr), Ringz::new(sr), Ringz::new(sr), Ringz::new(sr)],
+                [Ringz::new(sr), Ringz::new(sr), Ringz::new(sr), Ringz::new(sr)]],
+            klank_pink,
+            klank_notes: [i8::MAX; 4],
+            klank_hz: f32::NAN,
+            out_lpf: [Biquad::lowpass(sr, 1000.0, Q_BUTTERWORTH), Biquad::lowpass(sr, 1000.0, Q_BUTTERWORTH)],
+            out_hpf: [Biquad::highpass(sr, HPF_HZ, Q_BUTTERWORTH), Biquad::highpass(sr, HPF_HZ, Q_BUTTERWORTH)],
+            reverb: ReverbLite::new(sr, REVERB_MIX, 2.0, 0.5),
+            intro_pos: 0,
             mix_noise,
             mix_lfo: SinOsc::new(sr, 0.0),
             piano_g: 0.0,
@@ -283,9 +316,9 @@ impl Eno {
         };
         s.set_params(hz, amp);
         prof::note_addr(0, s.voices[0].delay.buf_ptr());
-        prof::note_addr(1, s.voices[VOICES - 1].delay.buf_ptr());
+        prof::note_addr(1, s.reverb.buf_ptr());
         prof::note_addr(2, s.scratch.as_ptr().cast());
-        prof::note_addr(3, s.voices.as_ptr().cast());
+        prof::note_addr(3, s.combs[0].buf_ptr());
         s
     }
 
@@ -324,6 +357,20 @@ impl Eno {
         let n = self.moog_noise.tick(c * (1.0 / 6.0));
         let x = self.moog_lag.tick(n, 6.0 / c);
         self.moog_cut = (hz * 2.0 * exp2(LOG2_30 * (x + 1.0) * 0.5)).min(self.max_hz);
+        if KLANK_ENABLED && (self.plane_notes != self.klank_notes || hz != self.klank_hz) {
+            self.klank_notes = self.plane_notes;
+            // a base-pitch jump leaves the old resonance state far off the new coefficients: clear it
+            let reset = hz != self.klank_hz && !self.klank_hz.is_nan();
+            self.klank_hz = hz;
+            for ch in self.klank.iter_mut() {
+                for (k, rz) in ch.iter_mut().enumerate() {
+                    if reset {
+                        *rz = Ringz::new(self.sr);
+                    }
+                    rz.set((hz * exp2(self.plane_notes[k] as f32 * (1.0 / 12.0))).min(self.max_hz), KLANK_DECAY);
+                }
+            }
+        }
         self.note_control();
     }
 
@@ -387,6 +434,10 @@ impl Voice for Eno {
             // hz < 1 (or non-finite) means silence
             self.silent = h < 1.0;
             self.sub_f_hz = [self.hz * 0.25, self.hz * 0.5];
+            let lp = (self.hz * 8.0).min(self.max_hz);
+            for f in self.out_lpf.iter_mut() {
+                f.set_lowpass(lp);
+            }
         }
         self.amp = if self.silent { 0.0 } else { amp_in };
     }
@@ -451,6 +502,19 @@ impl Voice for Eno {
                 r[j] = y[1];
             }
             pb.mark(P_MOOG);
+            if KLANK_ENABLED {
+                for j in 0..n {
+                    let (mut kl, mut kr) = (0.0f32, 0.0f32);
+                    let (xl, xr) = (self.klank_pink[0].tick() * KLANK_EXCITE, self.klank_pink[1].tick() * KLANK_EXCITE);
+                    for k in 0..4 {
+                        kl += self.klank[0][k].tick(xl);
+                        kr += self.klank[1][k].tick(xr);
+                    }
+                    l[j] += kl * KLANK_GAIN;
+                    r[j] += kr * KLANK_GAIN;
+                }
+            }
+            pb.mark(P_KLANK);
             // piano: noise burst -> two tuned combs -> RLPF -> HPF
             let mut nm = [0.0f32; CTRL];
             let pg = amp * self.piano_g;
@@ -480,10 +544,33 @@ impl Voice for Eno {
                 }
             }
             pb.mark(P_PERC);
-            for (j, o) in out[i..i + n].iter_mut().enumerate() {
-                *o = [(l[j] + nm[j]) * amp, (r[j] + nm[j]) * amp];
+            // final chain: LPF + HPF, intro fade, reverb, amp
+            let intro_end = ((INTRO_DELAY_S + INTRO_RAMP_S) * self.sr) as u32;
+            let intro_off = INTRO_DELAY_S * self.sr;
+            let intro_inv = 1.0 / (INTRO_RAMP_S * self.sr);
+            for j in 0..n {
+                let g = if self.intro_pos >= intro_end {
+                    1.0
+                } else {
+                    ((self.intro_pos as f32 - intro_off) * intro_inv).clamp(0.0, 1.0)
+                };
+                self.intro_pos = self.intro_pos.saturating_add(1);
+                l[j] = self.out_hpf[0].tick(self.out_lpf[0].tick(l[j] + nm[j])) * g;
+                r[j] = self.out_hpf[1].tick(self.out_lpf[1].tick(r[j] + nm[j])) * g;
             }
             pb.mark(P_FINAL);
+            for (j, o) in out[i..i + n].iter_mut().enumerate() {
+                if REVERB_SINGLE_CHANNEL {
+                    let m = (l[j] + r[j]) * 0.5;
+                    let dry = m * (1.0 - REVERB_MIX);
+                    let wet = self.reverb.tick(m, m)[0] - dry;
+                    *o = [(l[j] * (1.0 - REVERB_MIX) + wet) * amp, (r[j] * (1.0 - REVERB_MIX) + wet) * amp];
+                } else {
+                    let y = self.reverb.tick(l[j], r[j]);
+                    *o = [y[0] * amp, y[1] * amp];
+                }
+            }
+            pb.mark(P_REVERB);
             self.pos = (self.pos + n) % CTRL;
             i += n;
         }
