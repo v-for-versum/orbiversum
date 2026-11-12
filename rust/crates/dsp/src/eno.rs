@@ -502,7 +502,7 @@ impl Voice for Eno {
                 r[j] = y[1];
             }
             pb.mark(P_MOOG);
-            if KLANK_ENABLED {
+            if KLANK_ENABLED && !self.silent {
                 for j in 0..n {
                     let (mut kl, mut kr) = (0.0f32, 0.0f32);
                     let (xl, xr) = (self.klank_pink[0].tick() * KLANK_EXCITE, self.klank_pink[1].tick() * KLANK_EXCITE);
@@ -548,15 +548,20 @@ impl Voice for Eno {
             let intro_end = ((INTRO_DELAY_S + INTRO_RAMP_S) * self.sr) as u32;
             let intro_off = INTRO_DELAY_S * self.sr;
             let intro_inv = 1.0 / (INTRO_RAMP_S * self.sr);
-            for j in 0..n {
-                let g = if self.intro_pos >= intro_end {
-                    1.0
-                } else {
-                    ((self.intro_pos as f32 - intro_off) * intro_inv).clamp(0.0, 1.0)
-                };
-                self.intro_pos = self.intro_pos.saturating_add(1);
-                l[j] = self.out_hpf[0].tick(self.out_lpf[0].tick(l[j] + nm[j])) * g;
-                r[j] = self.out_hpf[1].tick(self.out_lpf[1].tick(r[j] + nm[j])) * g;
+            // silent (hz/amp zero): feed the chain zeros so the 8 Hz-clamped layers never reach the reverb
+            let (in_l, in_r) = if self.silent { (0.0, 0.0) } else { (1.0, 1.0) };
+            let mut j = 0;
+            while j < n && self.intro_pos < intro_end {
+                let g = ((self.intro_pos as f32 - intro_off) * intro_inv).clamp(0.0, 1.0);
+                self.intro_pos += 1;
+                l[j] = self.out_hpf[0].tick(self.out_lpf[0].tick((l[j] + nm[j]) * in_l)) * g;
+                r[j] = self.out_hpf[1].tick(self.out_lpf[1].tick((r[j] + nm[j]) * in_r)) * g;
+                j += 1;
+            }
+            while j < n {
+                l[j] = self.out_hpf[0].tick(self.out_lpf[0].tick((l[j] + nm[j]) * in_l));
+                r[j] = self.out_hpf[1].tick(self.out_lpf[1].tick((r[j] + nm[j]) * in_r));
+                j += 1;
             }
             pb.mark(P_FINAL);
             for (j, o) in out[i..i + n].iter_mut().enumerate() {

@@ -41,10 +41,14 @@ fn eno_block_size_independence() {
         out
     };
     let base = run(128);
+    // multiples of the control step are bit-exact; others only differ by f32 rounding noise
+    for b in [32usize, 64, 256] {
+        assert!(base == run(b), "block {b} not bit-exact");
+    }
     for b in [1usize, 37, 1000] {
         let o = run(b);
         for (k, (x, y)) in base.iter().zip(o.iter()).enumerate() {
-            assert!((x[0] - y[0]).abs() <= 5e-5 && (x[1] - y[1]).abs() <= 5e-5, "block {b} sample {k}");
+            assert!((x[0] - y[0]).abs() <= 3e-5 && (x[1] - y[1]).abs() <= 3e-5, "block {b} sample {k}");
         }
     }
 }
@@ -108,7 +112,7 @@ fn eno_determinism_and_block_size_still_hold() {
     for b in [1usize, 37] {
         let o = render(4, 330.0, 0.8, n, b);
         for (k, (x, y)) in base.iter().zip(o.iter()).enumerate() {
-            assert!((x[0] - y[0]).abs() <= 5e-5 && (x[1] - y[1]).abs() <= 5e-5, "block {b} sample {k}");
+            assert!((x[0] - y[0]).abs() <= 3e-5 && (x[1] - y[1]).abs() <= 3e-5, "block {b} sample {k}");
         }
     }
 }
@@ -173,12 +177,16 @@ fn eno_survives_param_changes() {
     let mut v = Eno::new(4, SR);
     let sets = [(330.0, 1.0), (110.0, 0.3), (0.0, 0.0), (660.0, 1.0)];
     let mut buf = [[0.0f32; 2]; 128];
+    let mut peak = 0.0f32;
     for b in 0..(30 * 48_000 / 128) {
         let (h, a) = sets[(b / 20) % 4];
         v.set_params(h, a);
         v.process(&mut buf);
         assert!(buf.iter().flatten().all(|x| x.is_finite()), "block {b}");
+        peak = peak.max(buf.iter().flatten().fold(0.0f32, |m, x| m.max(x.abs())));
     }
+    println!("param changes peak {peak}");
+    assert!(peak <= 1.0, "peak {peak}");
 }
 
 #[test]
@@ -206,4 +214,32 @@ fn eno_dc_and_lows_are_controlled() {
         let db = 20.0 * (amp / rms).log10();
         assert!(db < -30.0, "{f} Hz at {db} dB rel RMS");
     }
+}
+
+#[test]
+fn eno_return_from_silence_is_not_louder_than_steady() {
+    let peak = |x: &[[f32; 2]]| x.iter().flatten().fold(0.0f32, |m, s| m.max(s.abs()));
+    let mut v = Eno::new(8, SR);
+    v.set_params(330.0, 1.0);
+    let mut buf = [[0.0f32; 2]; 128];
+    let mut steady = 0.0f32;
+    for b in 0..(30 * 48_000 / 128) {
+        v.process(&mut buf);
+        if b >= 20 * 48_000 / 128 {
+            steady = steady.max(peak(&buf));
+        }
+    }
+    v.set_params(0.0, 0.0);
+    for _ in 0..(20 * 48_000 / 128) {
+        v.process(&mut buf);
+        assert!(buf.iter().flatten().all(|&x| x == 0.0));
+    }
+    v.set_params(330.0, 1.0);
+    let mut first = 0.0f32;
+    for _ in 0..(48_000 / 128) {
+        v.process(&mut buf);
+        first = first.max(peak(&buf));
+    }
+    println!("steady {steady} first-second after silence {first}");
+    assert!(first < 1.5 * steady.max(0.05), "first {first} steady {steady}");
 }
