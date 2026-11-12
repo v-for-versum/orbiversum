@@ -145,6 +145,24 @@ fn main() {
                     line.push_str(&format!(" {name} {us}"));
                 }
                 log::info!("prof: us/block over {blocks} blocks:{line} | sum {total}");
+                let (wt, w) = dsp::prof::take_worst();
+                let mut wl = std::string::String::new();
+                for (name, v) in dsp::prof::NAMES.iter().zip(w.iter()) {
+                    wl.push_str(&format!(" {name} {}", v / CYCLES_PER_US));
+                }
+                log::info!("prof: worst block {} us:{wl}", wt / CYCLES_PER_US);
+                let a = dsp::prof::addrs();
+                let region = |p: usize| match p {
+                    0x3C00_0000..=0x3DFF_FFFF => "PSRAM",
+                    0x3FC0_0000..=0x3FCF_FFFF => "internal",
+                    _ => "?",
+                };
+                log::info!(
+                    "mem: delay[0] {:#x} {}, delay[11] {:#x} {}, scratch {:#x} {}, lanes {:#x} {}; process code {:#x} ({})",
+                    a[0], region(a[0]), a[1], region(a[1]), a[2], region(a[2]), a[3], region(a[3]),
+                    dsp::starlids::process_addr(),
+                    if (0x4037_0000..0x403F_0000).contains(&dsp::starlids::process_addr()) { "IRAM" } else { "cache-mapped" },
+                );
             }
             log::info!("rust: alive, selected {}", disp.selected());
             window_flush_us = 0;

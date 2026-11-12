@@ -20,3 +20,8 @@ CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y
 # that fills its core starves main and IDLE1.
 # CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1 is not set
 CONFIG_ESP_MAIN_TASK_AFFINITY_CPU0=y
+
+# Run code and rodata from the flash cache, not PSRAM (XIP from PSRAM made the audio
+# path slow and competes with the display's PSRAM traffic). Baseline sets both to y.
+# CONFIG_SPIRAM_FETCH_INSTRUCTIONS is not set
+# CONFIG_SPIRAM_RODATA is not set

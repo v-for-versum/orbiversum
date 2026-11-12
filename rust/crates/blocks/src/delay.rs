@@ -25,6 +25,11 @@ impl DelayC {
         DelayC { sr, buf: vec![0.0; len], w: 0, mask: len - 1, max_d: (need - 3) as f32, delay_c: f32::NAN, k: 1, f: 0.0 }
     }
 
+    /// Start address of the sample buffer (for memory-placement diagnostics).
+    pub fn buf_ptr(&self) -> *const u8 {
+        self.buf.as_ptr().cast()
+    }
+
     pub fn tick(&mut self, x: f32, delay_s: f32) -> f32 {
         self.buf[self.w] = x;
         if delay_s != self.delay_c {

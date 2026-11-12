@@ -62,6 +62,75 @@ impl MoogLadder {
     }
 }
 
+/// Two MoogLadders with a shared cutoff, processed in lock step.
+///
+/// Bit-identical to two `MoogLadder`s; the point is instruction-level
+/// parallelism: each ladder is a serial chain of dependent FPU ops (tanh ->
+/// stage -> tanh ...), and the in-order S3 core stalls on every one, so
+/// interleaving the two independent channels fills those stalls.
+pub struct MoogStereo {
+    inv_sr: f32,
+    inv_passes: f32,
+    passes: usize,
+    s: [[f32; 4]; 2],
+    last: [f32; 2],
+    ts: [[f32; 4]; 2],
+    cached_cutoff: f32,
+    tune: f32,
+    acr: f32,
+}
+
+impl MoogStereo {
+    pub fn with_oversample(sr: f32, passes: usize) -> MoogStereo {
+        let passes = passes.clamp(1, 2);
+        MoogStereo {
+            inv_sr: 1.0 / sr,
+            inv_passes: 1.0 / passes as f32,
+            passes,
+            s: [[0.0; 4]; 2],
+            last: [0.0; 2],
+            ts: [[0.0; 4]; 2],
+            cached_cutoff: f32::NAN,
+            tune: 0.0,
+            acr: 0.0,
+        }
+    }
+
+    #[inline]
+    pub fn tick(&mut self, x: [f32; 2], cutoff_hz: f32, res: f32) -> [f32; 2] {
+        if cutoff_hz != self.cached_cutoff {
+            let fc = (cutoff_hz * self.inv_sr).clamp(0.0005, 0.45);
+            let fcr = 1.8730 * fc * fc * fc + 0.4955 * fc * fc - 0.6490 * fc + 0.9988;
+            self.acr = -3.9364 * fc * fc + 1.8409 * fc + 0.9968;
+            self.tune = 1.0 - expf(-2.0 * core::f32::consts::PI * (fc * self.inv_passes) * fcr);
+            self.cached_cutoff = cutoff_hz;
+        }
+        let (tune, acr) = (self.tune, self.acr);
+        let res4 = res.clamp(0.0, 3.8) * acr;
+        let mut tin = if res4 == 0.0 { [tanh(x[0]), tanh(x[1])] } else { [0.0; 2] };
+        for _ in 0..self.passes {
+            if res4 != 0.0 {
+                tin = [tanh(x[0] - res4 * self.last[0]), tanh(x[1] - res4 * self.last[1])];
+            }
+            let mut prev = tin;
+            for k in 0..4 {
+                let s0 = self.s[0][k] + tune * (prev[0] - self.ts[0][k]);
+                let s1 = self.s[1][k] + tune * (prev[1] - self.ts[1][k]);
+                let t0 = tanh(s0);
+                let t1 = tanh(s1);
+                self.s[0][k] = s0;
+                self.s[1][k] = s1;
+                self.ts[0][k] = t0;
+                self.ts[1][k] = t1;
+                prev = [t0, t1];
+            }
+            self.last[0] = 0.5 * (self.s[0][3] + self.last[0]);
+            self.last[1] = 0.5 * (self.s[1][3] + self.last[1]);
+        }
+        [self.s[0][3], self.s[1][3]]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,6 +185,23 @@ mod tests {
     #[test]
     fn matches_reference_res_positive() {
         compare(1.5, 5e-3);
+    }
+
+    #[test]
+    fn stereo_is_bit_identical_to_two_ladders() {
+        for passes in [1usize, 2] {
+            for res in [0.0f32, 2.0] {
+                let mut st = MoogStereo::with_oversample(48000.0, passes);
+                let mut a = MoogLadder::with_oversample(48000.0, passes);
+                let mut b = MoogLadder::with_oversample(48000.0, passes);
+                for i in 0..20000 {
+                    let (xl, xr) = (libm::sinf(i as f32 * 0.05) * 0.9, libm::sinf(i as f32 * 0.031) * 0.7);
+                    let cut = 400.0 + (i / 32 % 50) as f32 * 40.0;
+                    let y = st.tick([xl, xr], cut, res);
+                    assert_eq!(y, [a.tick(xl, cut, res), b.tick(xr, cut, res)], "passes {passes} res {res} i {i}");
+                }
+            }
+        }
     }
 
     #[test]

@@ -22,6 +22,34 @@ pub const NAMES: [&str; SECTIONS] = ["control", "saw", "lpf", "delay", "mix", "m
 static CLOCK: AtomicUsize = AtomicUsize::new(0);
 static TOTALS: [AtomicU32; SECTIONS] = [const { AtomicU32::new(0) }; SECTIONS];
 static BLOCKS: AtomicU32 = AtomicU32::new(0);
+/// Worst block since the last `take`: total ticks and its per-section split.
+static WORST_TOTAL: AtomicU32 = AtomicU32::new(0);
+static WORST: [AtomicU32; SECTIONS] = [const { AtomicU32::new(0) }; SECTIONS];
+/// Addresses of buffers noted by voices (slot meaning is up to the caller).
+pub const NOTES: usize = 4;
+static ADDRS: [AtomicUsize; NOTES] = [const { AtomicUsize::new(0) }; NOTES];
+
+/// Remembers where a buffer lives so the firmware can report internal RAM vs PSRAM.
+pub fn note_addr(slot: usize, ptr: *const u8) {
+    ADDRS[slot].store(ptr as usize, Ordering::Relaxed);
+}
+
+pub fn addrs() -> [usize; NOTES] {
+    let mut o = [0; NOTES];
+    for (a, s) in o.iter_mut().zip(ADDRS.iter()) {
+        *a = s.load(Ordering::Relaxed);
+    }
+    o
+}
+
+/// Worst block (total ticks, per-section ticks) since the last call; resets it.
+pub fn take_worst() -> (u32, [u32; SECTIONS]) {
+    let mut o = [0u32; SECTIONS];
+    for (a, s) in o.iter_mut().zip(WORST.iter()) {
+        *a = s.load(Ordering::Relaxed);
+    }
+    (WORST_TOTAL.swap(0, Ordering::Relaxed), o)
+}
 
 /// Installs a monotonic tick source (wrapping u32).
 pub fn set_clock(f: fn() -> u32) {
@@ -63,6 +91,14 @@ impl Block {
     pub fn finish(self) {
         if CLOCK.load(Ordering::Relaxed) == 0 {
             return;
+        }
+        let total = self.acc.iter().fold(0u32, |a, b| a.wrapping_add(*b));
+        if total > WORST_TOTAL.load(Ordering::Relaxed) {
+            // single writer (the audio thread); readers may see a torn split, fine for diagnostics
+            WORST_TOTAL.store(total, Ordering::Relaxed);
+            for (a, w) in self.acc.iter().zip(WORST.iter()) {
+                w.store(*a, Ordering::Relaxed);
+            }
         }
         for (a, t) in self.acc.iter().zip(TOTALS.iter()) {
             t.fetch_add(*a, Ordering::Relaxed);

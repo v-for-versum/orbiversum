@@ -3,7 +3,7 @@
 /// 1/d for d > 0 without a hardware divide (the ESP32-S3 FPU has none, so `/`
 /// is a software `__divsf3` call of ~100 cycles): bit-trick seed + 3 Newton steps,
 /// relative error ~1e-7.
-#[inline]
+#[inline(always)]
 pub fn recip(d: f32) -> f32 {
     let mut y = f32::from_bits(0x7EF3_11C7u32.wrapping_sub(d.to_bits()));
     y *= 2.0 - d * y;
@@ -17,7 +17,7 @@ pub fn recip(d: f32) -> f32 {
 /// Odd, monotonic, bounded by ±1, continuous. Max abs error against
 /// `libm::tanhf` on [-8, 8] is ~1e-4 (at the clamp point).
 /// No branches on constants: clamp + polynomial ratio only.
-#[inline]
+#[inline(always)]
 pub fn tanh(x: f32) -> f32 {
     let x = x.clamp(-4.9, 4.9);
     let x2 = x * x;

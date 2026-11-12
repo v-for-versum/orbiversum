@@ -11,7 +11,7 @@ use blocks::{
     biquad::Biquad,
     delay::DelayC,
     lfo::{Noise0, Noise1, VarLagSine},
-    moog::MoogLadder,
+    moog::MoogStereo,
     osc::{LfTri, Pulse, SawDpw, SinOsc},
     pan::pan2,
     rng::Rng,
@@ -120,7 +120,7 @@ pub struct Starlids {
     moog_lag_noise: Noise0,
     moog_lag: VarLagSine,
     moog_cut: f32,
-    moog: [MoogLadder; 2],
+    moog: MoogStereo,
     hpf: [Biquad; 2],
 }
 
@@ -150,13 +150,17 @@ impl Starlids {
             moog_lag_noise: Noise0::new(child_rng(&mut rng), sr),
             moog_lag: VarLagSine::new(sr),
             moog_cut: 880.0,
-            moog: [MoogLadder::with_oversample(sr, 1), MoogLadder::with_oversample(sr, 1)],
+            moog: MoogStereo::with_oversample(sr, 1),
             hpf: [
                 Biquad::highpass(sr, 20.0, Q_BUTTERWORTH),
                 Biquad::highpass(sr, 20.0, Q_BUTTERWORTH),
             ],
         };
         s.set_params(hz, amp);
+        prof::note_addr(0, s.lanes[0].delay.buf_ptr());
+        prof::note_addr(1, s.lanes[LANES - 1].delay.buf_ptr());
+        prof::note_addr(2, s.scratch.as_ptr().cast());
+        prof::note_addr(3, s.lanes.as_ptr().cast());
         s
     }
 
@@ -187,6 +191,9 @@ impl Voice for Starlids {
         self.amp = if silent { 0.0 } else { amp };
     }
 
+    // Hot path: keep it in internal instruction RAM so it never waits on the flash/PSRAM cache.
+    #[inline(never)]
+    #[cfg_attr(target_arch = "xtensa", link_section = ".iram1.starlids_process")]
     fn process(&mut self, out: &mut [[f32; 2]]) {
         let gain = self.amp * (1.0 / 12.0);
         let sub_gain = gain * core::f32::consts::FRAC_1_SQRT_2;
@@ -237,8 +244,9 @@ impl Voice for Starlids {
             pb.mark(prof::MIX);
             let cut = self.moog_cut;
             for j in 0..n {
-                l[j] = self.moog[0].tick(tanh(l[j]), cut, 0.0);
-                r[j] = self.moog[1].tick(tanh(r[j]), cut, 0.0);
+                let y = self.moog.tick([tanh(l[j]), tanh(r[j])], cut, 0.0);
+                l[j] = y[0];
+                r[j] = y[1];
             }
             pb.mark(prof::MOOG);
             for j in 0..n {
@@ -250,4 +258,9 @@ impl Voice for Starlids {
         }
         pb.finish();
     }
+}
+
+/// Address of `Starlids::process` (diagnostics: IRAM 0x4037xxxx vs cache-mapped 0x42xxxxxx).
+pub fn process_addr() -> usize {
+    <Starlids as Voice>::process as fn(&mut Starlids, &mut [[f32; 2]]) as usize
 }
