@@ -49,7 +49,9 @@ impl Pulse {
     /// `width` is the duty (0..1); output is +1 while phase < width, else -1.
     pub fn tick(&mut self, hz: f32, width: f32) -> f32 {
         self.phase = advance(self.phase, hz / self.sr);
-        if self.phase < width { 1.0 } else { -1.0 }
+        // Arithmetic select: the xtensa LLVM backend ICEs on the constant-pool
+        // form of `if .. { 1.0 } else { -1.0 }` (cannot select PCREL_WRAPPER).
+        2.0 * ((self.phase < width) as u8 as f32) - 1.0
     }
 }
 

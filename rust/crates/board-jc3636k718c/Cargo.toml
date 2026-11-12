@@ -1,0 +1,10 @@
+[package]
+name = "board-jc3636k718c"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+
+[target.'cfg(target_os = "espidf")'.dependencies]
+esp-idf-svc = "0.53"
+log = "0.4"
