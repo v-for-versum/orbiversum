@@ -126,6 +126,13 @@ impl ReverbLite {
         self.ch[0].mem_bytes() + self.ch[1].mem_bytes()
     }
 
+    /// Mono path: runs only channel 0's lines and returns the wet contribution (`wet * mix`),
+    /// so the caller adds its own dry signal. Do not mix with `tick` on the same instance.
+    #[inline(always)]
+    pub fn tick_mono_wet(&mut self, x: f32) -> f32 {
+        self.ch[0].tick(x, self.fb, self.d1, self.d2) * self.mix
+    }
+
     #[inline(always)]
     pub fn tick(&mut self, l: f32, r: f32) -> [f32; 2] {
         let (fb, d1, d2, m) = (self.fb, self.d1, self.d2, self.mix);
@@ -179,6 +186,17 @@ mod tests {
         assert!(e[2] < 1e-3 * e[0], "{e:?}");
         let f = first.unwrap();
         assert!((f as i64 - 1214).abs() <= 2, "first echo at {f}");
+    }
+
+    #[test]
+    fn reverb_mono_matches_channel0_wet() {
+        let mut a = ReverbLite::new(SR, 0.45, 2.0, 0.5);
+        let mut b = ReverbLite::new(SR, 0.45, 2.0, 0.5);
+        for i in 0..20000 {
+            let x = libm::sinf(i as f32 * 0.05);
+            let full = a.tick(x, 0.0)[0] - x * 0.55;
+            assert!((full - b.tick_mono_wet(x)).abs() < 1e-6, "i={i}");
+        }
     }
 
     #[test]
