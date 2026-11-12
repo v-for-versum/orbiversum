@@ -1,8 +1,10 @@
 //! Fast approximations for the audio hot path.
 
 /// 1/d for d > 0 without a hardware divide (the ESP32-S3 FPU has none, so `/`
-/// is a software `__divsf3` call of ~100 cycles): bit-trick seed + 3 Newton steps,
-/// relative error ~1e-7.
+/// is a software `__divsf3` call of ~100 cycles): bit-trick seed + 3 Newton steps.
+/// Measured relative error up to ~6.6e-6 on 0.001..1e8 (not 1e-7: the seed error
+/// is squared three times and f32 rounding adds to it); the test bound is 5e-7 on the
+/// product d * recip(d) over a narrower sweep, see `recip_is_accurate`.
 #[inline(always)]
 pub fn recip(d: f32) -> f32 {
     let mut y = f32::from_bits(0x7EF3_11C7u32.wrapping_sub(d.to_bits()));
@@ -34,8 +36,9 @@ pub fn tanh_cheap(x: f32) -> f32 {
 
 /// Padé [7/6] approximation of `tanh`, input clamped to ±4.9.
 ///
-/// Odd, monotonic, bounded by ±1, continuous. Max abs error against
-/// `libm::tanhf` on [-8, 8] is ~1e-4 (at the clamp point).
+/// Odd, continuous, monotonic up to ~1e-6 of f32 noise. Measured max abs error against
+/// `libm::tanhf` on [-8, 8] is ~8.5e-5 (at the clamp point), where it saturates at
+/// ~0.99997, i.e. just below, not exactly, ±1; the output is clamped to [-1, 1].
 /// No branches on constants: clamp + polynomial ratio only.
 #[inline(always)]
 pub fn tanh(x: f32) -> f32 {

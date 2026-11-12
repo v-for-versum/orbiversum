@@ -63,6 +63,12 @@ impl MoogLadder {
     }
 }
 
+/// Production configuration (Starlids): ONE ladder pass per sample, not the 2x
+/// oversampling of the norns original, and a single input saturation tanh(x) (the old
+/// pipeline applied tanh twice: tanh outside, tanh inside). Both are deliberate: the
+/// real-time budget on the ESP32-S3 did not allow more; see
+/// `dsp/tests/starlids_ref.rs` for the audible cost (within the golden tolerances).
+///
 /// Two MoogLadders with a shared cutoff, processed in lock step.
 ///
 /// Bit-identical to two `MoogLadder`s; the point is instruction-level
@@ -203,6 +209,29 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Production config against the old pipeline (2 passes, tanh(tanh(x)) input, libm tanh).
+    /// Measures the waveform difference caused by the two deliberate budget decisions.
+    #[test]
+    fn production_config_close_to_old_pipeline() {
+        let sr = 48000.0;
+        let mut new = MoogStereo::with_oversample(sr, 1);
+        let mut old = Old { sr, s: [0.0; 4], last: 0.0 };
+        let (mut worst, mut ref_peak) = (0.0f32, 0.0f32);
+        for i in 0..96000 {
+            let t = i as f32 / sr;
+            // level like the real Starlids mix (RMS about -19 dB, input of the outer tanh)
+            let l = 0.3 * libm::sinf(2.0 * core::f32::consts::PI * 110.0 * t)
+                + 0.15 * libm::sinf(2.0 * core::f32::consts::PI * 331.0 * t);
+            let cut = 880.0 + 3000.0 * (i % 9600) as f32 / 9600.0;
+            let a = new.tick([l, l], cut, 0.0)[0];
+            let b = old.tick(libm::tanhf(l), cut, 0.0);
+            worst = worst.max((a - b).abs());
+            ref_peak = ref_peak.max(b.abs());
+        }
+        // Measured: max difference 0.027 against a 0.416 peak (6.5%, about -24 dB); bound is 12%.
+        assert!(worst < 0.12 * ref_peak, "worst {worst}, ref peak {ref_peak}");
     }
 
     #[test]

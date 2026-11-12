@@ -30,6 +30,8 @@ const CTRL: usize = 32;
 const LANES: usize = 12;
 /// Lanes processed together in the hot loops (must divide LANES).
 const GROUP: usize = 4;
+const _: () = assert!(LANES % GROUP == 0, "lane loops process whole groups");
+const _: () = assert!(CTRL % 2 == 0 && CTRL > 0, "control segments are CTRL samples");
 const Q_BUTTERWORTH: f32 = core::f32::consts::FRAC_1_SQRT_2;
 /// Largest delay time reached: (0.02 + 0.01) / 15 s = 2 ms; margin added.
 const MAX_DELAY_S: f32 = 0.004;

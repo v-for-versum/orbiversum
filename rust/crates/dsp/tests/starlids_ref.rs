@@ -54,11 +54,20 @@ const GOLDEN: [([f64; 12], f64); 2] = [
     ([36.15, 34.25, 35.46, 34.21, 22.81, 1.14, -0.78, -24.24, -36.99, -57.71, -72.34, -91.26], -19.967),
 ];
 const RMS_TOL_DB: f64 = 0.5;
-/// Moog runs one pass per sample (was two): up to 6 kHz the spectrum stays within 1 dB;
-/// above that is the filter stopband (>60 dB under the peak), where up to 10 dB is allowed.
+/// Two deliberate departures from the golden pipeline (real-time budget on the ESP32-S3):
+///  1. the outer `tanh` before the Moog is gone (the ladder saturates its input itself,
+///     so the old signal went through tanh twice);
+///  2. the Moog runs ONE pass per sample instead of 2x oversampling.
+/// Up to 6 kHz the spectrum stays within 1 dB. Above 6 kHz is the ladder's stopband
+/// (60 dB and more under the peak): there the single-pass ladder rolls off differently
+/// (up to ~9 dB at 18 kHz, where the level is -55 dB against +36 dB at the peak), so the
+/// per-band bound is 10 dB; a summed-energy check (below) keeps that region honest.
 const BAND_TOL_DB: f64 = 1.0;
 const STOPBAND_HZ: f32 = 6000.0;
 const STOPBAND_TOL_DB: f64 = 10.0;
+/// Total power above 6 kHz (sum of the probes) may differ from the golden by at most this.
+/// Actual: +2.0 dB (seed 5), +1.9 dB (seed 9).
+const STOPBAND_SUM_TOL_DB: f64 = 3.0;
 
 #[test]
 fn print_stats() {
@@ -74,6 +83,12 @@ fn matches_golden() {
         let (db, rms) = stats(&render(seed));
         let (g_db, g_rms) = GOLDEN[i];
         assert!((rms - g_rms).abs() < RMS_TOL_DB, "seed {seed}: rms {rms:.2} vs {g_rms:.2} dB");
+        let sum = |v: &[f64]| {
+            let p: f64 = FREQS.iter().zip(v).filter(|(f, _)| **f > STOPBAND_HZ).map(|(_, d)| 10f64.powf(d / 10.0)).sum();
+            10.0 * p.log10()
+        };
+        let (s_new, s_gold) = (sum(&db), sum(&g_db));
+        assert!((s_new - s_gold).abs() < STOPBAND_SUM_TOL_DB, "seed {seed}: >6 kHz power {s_new:.2} vs {s_gold:.2} dB");
         for (j, f) in FREQS.iter().enumerate() {
             let tol = if *f > STOPBAND_HZ { STOPBAND_TOL_DB } else { BAND_TOL_DB };
             assert!(
