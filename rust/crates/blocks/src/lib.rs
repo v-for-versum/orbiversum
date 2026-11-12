@@ -12,5 +12,6 @@ pub mod noise;
 pub mod osc;
 pub mod pan;
 pub mod resonant;
+pub mod reverb;
 pub mod rng;
 pub mod seq;
