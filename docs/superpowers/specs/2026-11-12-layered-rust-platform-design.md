@@ -104,8 +104,8 @@ firmware-<board>        бинарник: выбирает плату и спи�
       (захват 22 с после сброса, один `rst:` за весь лог, ни `abort`, ни `Rebooting`):
       `I (385) esp_psram: Found 8MB PSRAM device`, `I (1152) bsp.display: ST77916 360x360 ready: QSPI 50 MHz, 16-line double buffer in internal RAM`,
       `I (1585) firmware_jc3636k718c: rust: bsp ok`, `I (1588) firmware_jc3636k718c: rust: psram total = 7460780 bytes`,
-      затем `rust: alive` каждые 5 с (1595–21598 мс) и LVGL sysmon ~90 FPS. Работа более 20 с без перезагрузок.
-    - Итог: шаг 4 проверен: Rust-прошивка линкует C BSP, `bsp_init` из Rust проходит (display, touch, encoder), PSRAM определён.
+      затем `rust: alive` каждые 5 с (6595–21598 мс) и LVGL sysmon ~90 FPS. Работа более 20 с без перезагрузок.
+    - Итог: шаг 4 проверен: Rust-прошивка линкует C BSP, `bsp_init` из Rust проходит (дисплей поднят; touch/encoder по логу не проверялись), PSRAM определён.
       Не проверено: энкодер/тач вручную, аудио (`bsp_audio_out_*` только слинкованы), длительная стабильность (>22 с).
       Обход i2c — костыль; чистое решение (не тянуть старый драйвер через esp-idf-hal) не пробовалось.
 - Нагрузка на CPU тяжёлых дронов не измерена; оценки только по составу UGen.
