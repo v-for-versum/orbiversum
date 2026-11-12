@@ -14,7 +14,7 @@
 //! parks. `service` (UI thread, call it every UI tick) does `stop` + `start`,
 //! so every allocation and free of applet memory happens on the UI thread.
 //! `audio` takes no locks, never allocates or frees and never blocks.
-use crate::applet::Applet;
+use crate::applet::{Applet, AppletInfo};
 use crate::params::Params;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -32,6 +32,7 @@ const READY: u8 = 2;
 
 struct Shared {
     slots: Vec<UnsafeCell<Box<dyn Applet + Send>>>,
+    infos: Vec<AppletInfo>,
     phase: AtomicU8,
     /// Applet that is (or is about to be) running; written by the UI thread
     /// while `phase == PARKED`, read by audio after seeing `READY`.
@@ -42,11 +43,10 @@ struct Shared {
     params: Arc<Params>,
 }
 
-// SAFETY: a slot is accessed by at most one thread at a time: the audio thread
+// SAFETY (Sync; Send is automatic): a slot is accessed by at most one thread at a time: the audio thread
 // while `phase == RUNNING`, the UI thread while `phase == PARKED`; the
 // hand-offs are Release stores / Acquire loads of `phase`.
 unsafe impl Sync for Shared {}
-unsafe impl Send for Shared {}
 
 pub struct Dispatcher {
     shared: Arc<Shared>,
@@ -71,17 +71,25 @@ pub struct AudioPath {
 impl Dispatcher {
     /// Starts applet 0. Panics on an empty list.
     pub fn new(applets: Vec<Box<dyn Applet + Send>>) -> Dispatcher {
+        Self::with_params(applets, Arc::new(Params::default()))
+    }
+
+    /// Like `new`, with the `Params` the applets' audio and UI halves share
+    /// (the dispatcher only hands it out via `params()`).
+    pub fn with_params(applets: Vec<Box<dyn Applet + Send>>, params: Arc<Params>) -> Dispatcher {
         assert!(!applets.is_empty(), "Dispatcher needs at least one applet");
+        let infos: Vec<AppletInfo> = applets.iter().map(|a| a.info()).collect();
         let mut slots: Vec<_> = applets.into_iter().map(UnsafeCell::new).collect();
         slots[0].get_mut().start();
         Dispatcher {
             shared: Arc::new(Shared {
                 slots,
+                infos,
                 phase: AtomicU8::new(RUNNING),
                 active: AtomicUsize::new(0),
                 target: AtomicUsize::new(0),
                 fade: AtomicUsize::new(DEFAULT_FADE),
-                params: Arc::new(Params::default()),
+                params,
             }),
             taken: false,
         }
@@ -107,7 +115,9 @@ impl Dispatcher {
         }
     }
 
-    /// UI-thread tick: if the audio path has faded the old applet out, stop it
+    /// UI-thread tick. **Must be called every UI tick**: the switch only
+    /// completes here, and the output stays silent until it does.
+    /// If the audio path has faded the old applet out, stop it
     /// and start the requested one (this is where memory is freed/allocated).
     pub fn service(&mut self) {
         let s = &*self.shared;
@@ -123,6 +133,20 @@ impl Dispatcher {
         }
         s.active.store(new, Ordering::Relaxed);
         s.phase.store(READY, Ordering::Release);
+    }
+
+    /// Number of applets.
+    pub fn len(&self) -> usize {
+        self.shared.slots.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        false
+    }
+
+    /// Cached `AppletInfo` of applet `idx` (for menus); `None` out of range.
+    pub fn info(&self, idx: usize) -> Option<AppletInfo> {
+        self.shared.infos.get(idx).copied()
     }
 
     /// Most recently requested (valid) applet.
@@ -184,6 +208,11 @@ impl AudioPath {
                     }
                     i += m;
                     self.mode = Mode::FadeOut(p + m);
+                    if p + m >= fade {
+                        // Park right away so `service` need not wait for the next block.
+                        self.mode = Mode::Parked;
+                        s.phase.store(PARKED, Ordering::Release);
+                    }
                 }
                 Mode::Parked => {
                     if s.phase.load(Ordering::Acquire) == READY {
@@ -208,12 +237,12 @@ impl AudioPath {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::applet::{AppletInfo, Dirty, InputEvent};
+    use crate::applet::{AppletInfo, Dirty};
     use core::alloc::{GlobalAlloc, Layout};
     use core::cell::Cell;
-    use crate::board::Canvas;
     use embedded_graphics::prelude::{Point, Size};
     use embedded_graphics::primitives::Rectangle;
+    use core::sync::atomic::{AtomicUsize, Ordering};
     use std::alloc::System;
 
     // Per-thread allocation accounting (tests run in parallel threads).
@@ -275,8 +304,6 @@ mod tests {
                 *f = [s, s];
             }
         }
-        fn input(&mut self, _ev: InputEvent) {}
-        fn draw(&mut self, _d: &mut Canvas<'_>, _dirty: &mut Dirty) {}
         fn stop(&mut self) {
             self.buf = Vec::new();
         }
@@ -292,8 +319,6 @@ mod tests {
         fn audio(&mut self, out: &mut [[f32; 2]]) {
             out.fill([self.0, self.0]);
         }
-        fn input(&mut self, _ev: InputEvent) {}
-        fn draw(&mut self, _d: &mut Canvas<'_>, _dirty: &mut Dirty) {}
         fn stop(&mut self) {}
     }
 
@@ -382,18 +407,26 @@ mod tests {
         let z = &y[..3072];
         assert_eq!(x.len(), 3072);
         assert_eq!(&x[..], z);
-        // Also across a switch.
+        // Also across a switch: fade-out ends mid-block (960 < 1000), `service`
+        // runs, then the new applet fades in. Block sizes divide 1000 and 4000.
         let run = |bs: usize| {
             let mut d = Dispatcher::new(vec![Mock::boxed(440.0, 0.5), Mock::boxed(300.0, 0.5)]);
             let mut a = d.take_audio();
-            let mut o = render(&mut a, 960 / bs, bs);
+            let mut o = render(&mut a, 1000 / bs, bs);
             d.select(1);
-            o.extend(render(&mut a, 960 / bs, bs)); // select picked up at the next block
+            o.extend(render(&mut a, 1000 / bs, bs));
             d.service();
-            o.extend(render(&mut a, 3840 / bs, bs));
+            o.extend(render(&mut a, 4000 / bs, bs));
             o
         };
-        assert_eq!(run(64), run(192));
+        let r40 = run(40);
+        assert_eq!(r40, run(100));
+        assert_eq!(r40, run(8));
+        // Non-vacuous: fade-in really happened (silence, then a ramp, then 300 Hz at 0.5).
+        let fade_in = &r40[2000..2000 + 960];
+        assert!(fade_in.iter().any(|f| f[0].abs() > 0.01), "no fade-in after service");
+        assert!(r40[2000..].iter().map(|f| f[0].abs()).fold(0.0, f32::max) > 0.45);
+        assert!(r40[1960..2000].iter().all(|f| *f == [0.0, 0.0]), "gap before service must be silent");
     }
 
     #[test]
@@ -429,18 +462,155 @@ mod tests {
         assert_eq!(with_bad, render(&mut a2, 16, 64));
     }
 
+    /// DC applet counting its `start` calls.
+    struct Counted(f32, Arc<AtomicUsize>);
+    impl Applet for Counted {
+        fn info(&self) -> AppletInfo {
+            AppletInfo { name: "counted" }
+        }
+        fn start(&mut self) {
+            self.1.fetch_add(1, Ordering::Relaxed);
+        }
+        fn audio(&mut self, out: &mut [[f32; 2]]) {
+            out.fill([self.0, self.0]);
+        }
+        fn stop(&mut self) {}
+    }
+
     #[test]
     fn rapid_selects_end_on_last() {
-        let mut d = Dispatcher::new(vec![Mock::boxed(1.0, 0.5), Mock::boxed(2.0, 0.5), Mock::boxed(3.0, 0.5)]);
+        let starts: Vec<_> = (0..3).map(|_| Arc::new(AtomicUsize::new(0))).collect();
+        let mut d = Dispatcher::new(
+            (0..3)
+                .map(|i| Box::new(Counted(0.1 * (i + 1) as f32, starts[i].clone())) as Box<dyn Applet + Send>)
+                .collect(),
+        );
         let mut a = d.take_audio();
         d.select(1);
         d.select(2);
         d.select(0);
         d.select(2);
-        for _ in 0..10 {
-            render(&mut a, 40, 64);
+        let mut out = Vec::new();
+        for _ in 0..40 {
+            out.extend(render(&mut a, 1, 64));
             d.service();
         }
-        assert_eq!(d.selected(), 2);
+        // Real output ends on applet 2 at full level; applet 1 was never started.
+        assert!((out.last().unwrap()[0] - 0.3).abs() < 1e-6);
+        let n: Vec<_> = starts.iter().map(|s| s.load(Ordering::Relaxed)).collect();
+        assert_eq!(n, [1, 0, 1]);
+    }
+
+    #[test]
+    fn service_works_right_after_fade_out_block() {
+        // Fade-out ends exactly at a block end: service must already see PARKED.
+        let mut d = Dispatcher::new(vec![Box::new(Dc(0.8)), Box::new(Dc(-0.8))]);
+        let mut a = d.take_audio();
+        render(&mut a, 2, 64);
+        d.select(1);
+        render(&mut a, 15, 64); // 960 samples = whole fade
+        d.service();
+        let out = render(&mut a, 20, 64);
+        assert!((out.last().unwrap()[0] + 0.8).abs() < 1e-6, "new applet never started");
+    }
+
+    #[test]
+    fn info_and_len_are_cached() {
+        let d = Dispatcher::new(vec![Mock::boxed(1.0, 0.5), Box::new(Dc(0.0))]);
+        assert_eq!(d.len(), 2);
+        assert_eq!(d.info(0).unwrap().name, "mock");
+        assert_eq!(d.info(1).unwrap().name, "dc");
+        assert!(d.info(2).is_none());
+        let p = Arc::new(Params::new(5.0, 0.25));
+        let d = Dispatcher::with_params(vec![Mock::boxed(1.0, 0.5)], p.clone());
+        assert!(Arc::ptr_eq(&p, &d.params()));
+    }
+
+    /// Applet that panics if its methods overlap or are called out of order.
+    struct Guard {
+        in_use: Arc<core::sync::atomic::AtomicBool>,
+        running: bool,
+        audio_calls: Arc<AtomicUsize>,
+    }
+    impl Guard {
+        fn enter(&self) {
+            assert!(!self.in_use.swap(true, Ordering::SeqCst), "concurrent applet access");
+        }
+        fn leave(&self) {
+            self.in_use.store(false, Ordering::SeqCst);
+        }
+    }
+    impl Applet for Guard {
+        fn info(&self) -> AppletInfo {
+            AppletInfo { name: "guard" }
+        }
+        fn start(&mut self) {
+            self.enter();
+            assert!(!self.running, "start while running");
+            self.running = true;
+            self.leave();
+        }
+        fn audio(&mut self, out: &mut [[f32; 2]]) {
+            self.enter();
+            assert!(self.running, "audio on a stopped applet");
+            out.fill([0.1, 0.1]);
+            self.audio_calls.fetch_add(1, Ordering::Relaxed);
+            self.leave();
+        }
+        fn stop(&mut self) {
+            self.enter();
+            assert!(self.running, "stop while not running");
+            self.running = false;
+            self.leave();
+        }
+    }
+
+    /// Hammers the unsafe hand-off: audio thread renders, UI thread selects at
+    /// random and ticks `service`. Any overlap or out-of-order call panics.
+    #[test]
+    fn stress_handoff_never_overlaps() {
+        use std::sync::atomic::AtomicBool;
+        let iters: usize = if cfg!(miri) { 300 } else { 100_000 };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let applets: Vec<Box<dyn Applet + Send>> = (0..4)
+            .map(|_| {
+                Box::new(Guard {
+                    in_use: Arc::new(AtomicBool::new(false)),
+                    running: false,
+                    audio_calls: calls.clone(),
+                }) as Box<dyn Applet + Send>
+            })
+            .collect();
+        let mut d = Dispatcher::new(applets);
+        d.set_fade_samples(32);
+        let mut a = d.take_audio();
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop2 = stop.clone();
+        let audio = std::thread::spawn(move || {
+            let mut b = [[0.0f32; 2]; 16];
+            while !stop2.load(Ordering::Relaxed) {
+                a.audio(&mut b);
+                std::thread::yield_now();
+            }
+            a
+        });
+        let mut x: u64 = 0x2545F4914F6CDD1D;
+        for _ in 0..iters {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            if x.is_multiple_of(3) {
+                d.select((x >> 8) as usize % 6); // includes out-of-range
+            }
+            d.service();
+            if x.is_multiple_of(5) {
+                std::thread::yield_now();
+            }
+        }
+        stop.store(true, Ordering::Relaxed);
+        let a = audio.join().expect("audio thread panicked: hand-off violated");
+        assert!(calls.load(Ordering::Relaxed) > 0);
+        drop(a);
+        drop(d);
     }
 }

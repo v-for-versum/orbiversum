@@ -67,16 +67,23 @@ impl Default for Dirty {
     }
 }
 
+/// Audio half of an applet: owned by the dispatcher and run on the audio
+/// thread (`Send`). Talks to its `AppletUi` half only through `Params` atomics.
 pub trait Applet {
     fn info(&self) -> AppletInfo;
-    /// May allocate. Called off the audio thread by the dispatcher.
+    /// May allocate. Called off the audio thread by `Dispatcher::service`.
     fn start(&mut self);
     /// Realtime: overwrites `out` with stereo frames. No allocation, no locks.
     fn audio(&mut self, out: &mut [[f32; 2]]);
+    /// May free memory. Called off the audio thread by `Dispatcher::service`.
+    fn stop(&mut self);
+}
+
+/// UI half of an applet: lives on the UI thread, need not be `Send`.
+pub trait AppletUi {
+    fn info(&self) -> AppletInfo;
     fn input(&mut self, ev: InputEvent);
     /// `Canvas` is an `embedded-graphics` `DrawTarget<Color = Rgb565, Error = Infallible>`
     /// (the trait itself is not dyn compatible, so `dyn DrawTarget` is impossible).
     fn draw(&mut self, d: &mut Canvas<'_>, dirty: &mut Dirty);
-    /// May free memory. Called off the audio thread by the dispatcher.
-    fn stop(&mut self);
 }

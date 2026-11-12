@@ -7,7 +7,7 @@ pub mod board;
 pub mod dispatcher;
 pub mod params;
 
-pub use applet::{Applet, AppletInfo, Dirty, InputEvent, MAX_DIRTY};
+pub use applet::{Applet, AppletInfo, AppletUi, Dirty, InputEvent, MAX_DIRTY};
 pub use board::{AudioError, AudioOut, Board, Canvas, Display, Surface, RenderFn};
 pub use dispatcher::{AudioPath, Dispatcher, DEFAULT_SAMPLE_RATE};
 pub use params::Params;
