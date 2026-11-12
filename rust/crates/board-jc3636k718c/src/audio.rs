@@ -5,6 +5,7 @@ use crate::ffi::{bsp_audio_out_init, bsp_audio_out_write, BspAudioOutConfig};
 use esp_idf_svc::hal::cpu::Core;
 use esp_idf_svc::hal::task::thread::ThreadSpawnConfiguration;
 use esp_idf_svc::sys::{self, esp_err_t, ESP_OK};
+use os::{AudioError, AudioOut, RenderFn};
 
 pub const SAMPLE_RATE: u32 = 48_000;
 /// Frames per render call.
@@ -15,55 +16,29 @@ const AUDIO_STACK: usize = 8192;
 /// Log core-1 load every this many blocks (~2 s at 48 kHz / 128).
 const LOAD_LOG_BLOCKS: u32 = 750;
 
-#[derive(Debug)]
-pub enum BoardError {
-    /// A BSP call returned a non-OK `esp_err_t`.
-    Esp(esp_err_t),
-    /// `AudioOut::start` called twice.
-    AlreadyStarted,
-    /// Requested sample rate differs from the fixed I2S clock.
-    UnsupportedSampleRate(u32),
-    /// The task could not be spawned.
-    Spawn(String),
-}
-
-impl core::fmt::Display for BoardError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-impl std::error::Error for BoardError {}
-
-pub type RenderFn = Box<dyn FnMut(&mut [[f32; 2]]) + Send>;
-
-/// Minimal audio-out interface; Task 8 replaces it with the `os` trait.
-pub trait AudioOut {
-    fn start(&mut self, sr: u32, render: RenderFn) -> Result<(), BoardError>;
-}
-
 pub struct JcAudio {
     started: bool,
 }
 
 impl JcAudio {
     /// Bring up I2S TX and unmute the DAC (48 kHz, 16-bit, stereo).
-    pub fn new() -> Result<JcAudio, BoardError> {
+    pub fn new() -> Result<JcAudio, AudioError> {
         let cfg = BspAudioOutConfig { sample_rate: SAMPLE_RATE, bits: 16, stereo: true };
         let err = unsafe { bsp_audio_out_init(&cfg) };
         if err != ESP_OK {
-            return Err(BoardError::Esp(err));
+            return Err(AudioError::Backend(err));
         }
         Ok(JcAudio { started: false })
     }
 }
 
 impl AudioOut for JcAudio {
-    fn start(&mut self, sr: u32, mut render: RenderFn) -> Result<(), BoardError> {
+    fn start(&mut self, sr: u32, mut render: RenderFn) -> Result<(), AudioError> {
         if self.started {
-            return Err(BoardError::AlreadyStarted);
+            return Err(AudioError::AlreadyStarted);
         }
         if sr != SAMPLE_RATE {
-            return Err(BoardError::UnsupportedSampleRate(sr));
+            return Err(AudioError::UnsupportedSampleRate(sr));
         }
         ThreadSpawnConfiguration {
             name: Some(c"audio"),
@@ -73,7 +48,7 @@ impl AudioOut for JcAudio {
             ..Default::default()
         }
         .set()
-        .map_err(|e| BoardError::Spawn(format!("{e:?}")))?;
+        .map_err(|_| AudioError::Spawn)?;
         let spawned = std::thread::Builder::new().stack_size(AUDIO_STACK).spawn(move || {
             // All buffers live on the task stack: no allocation in the loop.
             let mut frames = [[0.0f32; 2]; BLOCK_FRAMES];
@@ -156,7 +131,7 @@ impl AudioOut for JcAudio {
         });
         // Restore defaults for threads spawned later.
         let _ = ThreadSpawnConfiguration::default().set();
-        spawned.map_err(|e| BoardError::Spawn(e.to_string()))?;
+        spawned.map_err(|_| AudioError::Spawn)?;
         self.started = true;
         Ok(())
     }

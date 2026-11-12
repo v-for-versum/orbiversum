@@ -115,8 +115,10 @@ dependencies = [
 name = "board-jc3636k718c"
 version = "0.1.0"
 dependencies = [
+ "embedded-graphics",
  "esp-idf-svc",
  "log",
+ "os",
 ]
 
 [[package]]

@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+os = { path = "../os" }
+embedded-graphics = { version = "0.8.2", default-features = false }
 
 [target.'cfg(target_os = "espidf")'.dependencies]
 esp-idf-svc = "0.53"
