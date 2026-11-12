@@ -1,8 +1,6 @@
 #![no_std]
 extern crate alloc;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_builds() {}
-}
+pub mod lfo;
+pub mod osc;
+pub mod rng;
