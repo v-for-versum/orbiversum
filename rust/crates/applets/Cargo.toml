@@ -4,3 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+os = { path = "../os" }
+dsp = { path = "../dsp" }
+embedded-graphics = { version = "0.8.2", default-features = false }
+libm = "0.2"
