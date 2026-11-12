@@ -4,9 +4,10 @@ use crate::fast::sin as sinf;
 
 const TAU: f32 = core::f32::consts::TAU;
 
+#[inline(always)]
 fn advance(phase: f32, inc: f32) -> f32 {
     let p = phase + inc;
-    p - libm::floorf(p)
+    p - crate::fast::floor(p)
 }
 
 /// Band-limited saw (2nd-order DPW), output -1..1.
@@ -30,6 +31,7 @@ impl SawDpw {
     }
 
     /// Sets the pitch; call when it changes (control rate), then use `tick_fixed`.
+    #[inline(always)]
     pub fn set_hz(&mut self, hz: f32) {
         if hz != self.hz_c {
             self.hz_c = hz;
@@ -41,6 +43,7 @@ impl SawDpw {
         }
     }
 
+    #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         self.set_hz(hz);
         self.tick_fixed()
@@ -71,6 +74,7 @@ impl Pulse {
     }
 
     /// `width` is the duty (0..1); output is +1 while phase < width, else -1.
+    #[inline(always)]
     pub fn tick(&mut self, hz: f32, width: f32) -> f32 {
         self.phase = advance(self.phase, hz * self.inv_sr);
         // Arithmetic select: the xtensa LLVM backend ICEs on the constant-pool
@@ -88,9 +92,10 @@ pub struct SinOsc {
 impl SinOsc {
     /// `phase` in cycles (0..1).
     pub fn new(sr: f32, phase: f32) -> SinOsc {
-        SinOsc { sr, inv_sr: 1.0 / sr, phase: phase - libm::floorf(phase) }
+        SinOsc { sr, inv_sr: 1.0 / sr, phase: phase - crate::fast::floor(phase) }
     }
 
+    #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         let out = sinf(self.phase * TAU);
         self.phase = advance(self.phase, hz * self.inv_sr);
@@ -107,9 +112,10 @@ pub struct LfTri {
 
 impl LfTri {
     pub fn new(sr: f32, phase: f32) -> LfTri {
-        LfTri { sr, inv_sr: 1.0 / sr, phase: phase - libm::floorf(phase) }
+        LfTri { sr, inv_sr: 1.0 / sr, phase: phase - crate::fast::floor(phase) }
     }
 
+    #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         let p = self.phase;
         self.phase = advance(p, hz * self.inv_sr);

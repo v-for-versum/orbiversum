@@ -21,6 +21,7 @@ impl Biquad {
         Biquad { sr, inv_sr: 1.0 / sr, inv_2q: 0.5 / q, q, b0: 1.0, b1: 0.0, b2: 0.0, a1: 0.0, a2: 0.0, z1: 0.0, z2: 0.0 }
     }
 
+    #[inline(always)]
     fn trig(&self, hz: f32) -> (f32, f32) {
         let hz = hz.clamp(1.0, self.sr * 0.49);
         let w0 = 2.0 * core::f32::consts::PI * hz * self.inv_sr;
@@ -28,6 +29,7 @@ impl Biquad {
         (cosf(w0), alpha)
     }
 
+    #[inline(always)]
     fn set_coeffs(&mut self, b0: f32, b1: f32, b2: f32, a0: f32, a1: f32, a2: f32) {
         let inv = crate::fast::recip(a0);
         self.b0 = b0 * inv;
@@ -50,6 +52,7 @@ impl Biquad {
     }
 
     /// Recompute lowpass coefficients (keeps state, no allocation).
+    #[inline(always)]
     pub fn set_lowpass(&mut self, hz: f32) {
         let (c, alpha) = self.trig(hz);
         let b = (1.0 - c) * 0.5;

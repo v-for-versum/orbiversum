@@ -161,6 +161,7 @@ impl Dispatcher {
 
 impl AudioPath {
     /// Realtime: no locks, no allocation, no blocking. Overwrites `out`.
+    #[cfg_attr(target_arch = "xtensa", link_section = ".iram1.audio_path")]
     pub fn audio(&mut self, out: &mut [[f32; 2]]) {
         let shared = self.shared.clone(); // refcount bump only: no allocation
         let s = &*shared;

@@ -36,15 +36,23 @@ pub fn tanh(x: f32) -> f32 {
     (num * recip_fast(den)).clamp(-1.0, 1.0)
 }
 
+/// floor(x) for |x| < 2^31 without a libm call (libm's floorf lives in flash, which the
+/// audio path must not touch). Saturates outside that range.
+#[inline(always)]
+pub fn floor(x: f32) -> f32 {
+    let t = x as i32 as f32;
+    t - ((x < t) as u8 as f32)
+}
+
 /// sin(x), x in radians (any finite magnitude up to ~1e5 stays accurate to ~1e-5).
 ///
 /// f32 only: libm's sinf/cosf/expf/powf compute through f64, which on the
 /// ESP32-S3 (no f64 FPU) becomes software float and costs microseconds per call.
-#[inline]
+#[inline(always)]
 pub fn sin(x: f32) -> f32 {
     const INV_PI: f32 = 0.318_309_88;
     // n = round(x / pi), r = x - n*pi in [-pi/2, pi/2], sin(x) = (-1)^n sin(r)
-    let n = libm::floorf(x * INV_PI + 0.5);
+    let n = floor(x * INV_PI + 0.5);
     let r = (x - n * 3.140_625) - n * 9.676_535_6e-4; // pi split in two for accuracy
     let r2 = r * r;
     let p = r
@@ -56,16 +64,16 @@ pub fn sin(x: f32) -> f32 {
 }
 
 /// cos(x), x in radians.
-#[inline]
+#[inline(always)]
 pub fn cos(x: f32) -> f32 {
     sin(x + core::f32::consts::FRAC_PI_2)
 }
 
 /// 2^x for x in about [-126, 126] (clamped); relative error < 1e-5.
-#[inline]
+#[inline(always)]
 pub fn exp2(x: f32) -> f32 {
     let x = x.clamp(-126.0, 126.0);
-    let n = libm::floorf(x);
+    let n = floor(x);
     let f = x - n;
     let p = 1.0
         + f * (0.693_147_2
@@ -75,7 +83,7 @@ pub fn exp2(x: f32) -> f32 {
 }
 
 /// e^x via `exp2`.
-#[inline]
+#[inline(always)]
 pub fn exp(x: f32) -> f32 {
     exp2(x * core::f32::consts::LOG2_E)
 }
@@ -104,6 +112,17 @@ mod tests {
             assert!(((a - b) / b).abs() < 2e-5, "exp {x}");
             x += 0.0173;
         }
+    }
+
+    #[test]
+    fn floor_matches_libm() {
+        let mut x = -300.0f32;
+        while x < 300.0 {
+            assert_eq!(floor(x), libm::floorf(x), "{x}");
+            x += 0.37;
+        }
+        assert_eq!(floor(-2.0), -2.0);
+        assert_eq!(floor(0.0), 0.0);
     }
 
     #[test]

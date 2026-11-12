@@ -28,15 +28,6 @@ unsafe extern "C" {
 /// UI tick. Short enough for the knob, long enough to leave core 0 mostly idle.
 const TICK: Duration = Duration::from_millis(16);
 
-extern "C" {
-    /// Xtensa CPU cycle counter (ESP-IDF HAL).
-    fn xthal_get_ccount() -> u32;
-}
-
-fn cycles() -> u32 {
-    unsafe { xthal_get_ccount() }
-}
-
 /// CPU cycles per microsecond (CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240).
 const CYCLES_PER_US: u32 = 240;
 
@@ -57,7 +48,6 @@ fn main() {
     // Takes the panel from LVGL (stopped), allocates the DMA strip buffer, starts audio hardware.
     let mut board = JcBoard::new().expect("board init failed");
 
-    dsp::prof::set_clock(cycles);
     let params = Arc::new(Params::default());
     let seed = now_us() as u64;
     let (audio_halves, mut uis): (Vec<_>, Vec<Box<dyn AppletUi>>) =

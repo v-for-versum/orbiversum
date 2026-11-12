@@ -32,6 +32,7 @@ impl MoogLadder {
 
     /// `res` 0..4; clamped to 3.8 so the ladder always rings out instead of
     /// self-oscillating (the Huovilainen feedback gain is ~4 at oscillation).
+    #[inline(always)]
     pub fn tick(&mut self, x: f32, cutoff_hz: f32, res: f32) -> f32 {
         if cutoff_hz != self.cached_cutoff {
             let fc = (cutoff_hz * self.inv_sr).clamp(0.0005, 0.45);
@@ -96,7 +97,7 @@ impl MoogStereo {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn tick(&mut self, x: [f32; 2], cutoff_hz: f32, res: f32) -> [f32; 2] {
         if cutoff_hz != self.cached_cutoff {
             let fc = (cutoff_hz * self.inv_sr).clamp(0.0005, 0.45);

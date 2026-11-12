@@ -18,10 +18,11 @@ impl Noise0 {
         Noise0 { rng, sr, inv_sr: 1.0 / sr, phase: 0.0, value }
     }
 
+    #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         self.phase += hz * self.inv_sr;
         if self.phase >= 1.0 {
-            self.phase -= libm::floorf(self.phase);
+            self.phase -= crate::fast::floor(self.phase);
             self.value = self.rng.range(-1.0, 1.0);
         }
         self.value
@@ -45,10 +46,11 @@ impl Noise1 {
         Noise1 { rng, sr, inv_sr: 1.0 / sr, phase: 0.0, from, to }
     }
 
+    #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         self.phase += hz * self.inv_sr;
         if self.phase >= 1.0 {
-            self.phase -= libm::floorf(self.phase);
+            self.phase -= crate::fast::floor(self.phase);
             self.from = self.to;
             self.to = self.rng.range(-1.0, 1.0);
         }
@@ -73,6 +75,7 @@ impl VarLagSine {
         VarLagSine { sr, inv_sr: 1.0 / sr, start: 0.0, target: 0.0, pos: 1.0, value: 0.0, primed: false }
     }
 
+    #[inline(always)]
     pub fn tick(&mut self, target: f32, time_s: f32) -> f32 {
         if !self.primed {
             self.primed = true;

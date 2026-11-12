@@ -56,15 +56,28 @@ pub fn set_clock(f: fn() -> u32) {
     CLOCK.store(f as usize, Ordering::Relaxed);
 }
 
-#[inline]
+/// Current tick. On the ESP32-S3 this is the CPU cycle counter read inline
+/// (`rsr.ccount`, no call: a call into flash code can stall behind the flash cache);
+/// elsewhere the installed clock, or 0.
+#[inline(always)]
 pub fn now() -> u32 {
-    let c = CLOCK.load(Ordering::Relaxed);
-    if c == 0 {
-        0
-    } else {
-        // SAFETY: only `set_clock` stores here, and it stores a valid `fn() -> u32`.
-        let f: fn() -> u32 = unsafe { core::mem::transmute::<usize, fn() -> u32>(c) };
-        f()
+    #[cfg(target_arch = "xtensa")]
+    {
+        let v: u32;
+        // SAFETY: reads a special register, no memory or side effects.
+        unsafe { core::arch::asm!("rsr.ccount {0}", out(reg) v, options(nomem, nostack, preserves_flags)) };
+        v
+    }
+    #[cfg(not(target_arch = "xtensa"))]
+    {
+        let c = CLOCK.load(Ordering::Relaxed);
+        if c == 0 {
+            0
+        } else {
+            // SAFETY: only `set_clock` stores here, and it stores a valid `fn() -> u32`.
+            let f: fn() -> u32 = unsafe { core::mem::transmute::<usize, fn() -> u32>(c) };
+            f()
+        }
     }
 }
 
@@ -89,6 +102,7 @@ impl Block {
     }
 
     pub fn finish(self) {
+        #[cfg(not(target_arch = "xtensa"))]
         if CLOCK.load(Ordering::Relaxed) == 0 {
             return;
         }

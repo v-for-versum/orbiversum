@@ -91,8 +91,8 @@ impl Lane {
 
     fn control(&mut self, hz: f32, max_hz: f32) {
         let c = CTRL as f32;
-        let o1 = libm::floorf(self.tri1.tick(self.f_tri1 * c) + 1.0);
-        let o2 = libm::floorf(self.tri2.tick(self.f_tri2 * c) + 1.0);
+        let o1 = blocks::fast::floor(self.tri1.tick(self.f_tri1 * c) + 1.0);
+        let o2 = blocks::fast::floor(self.tri2.tick(self.f_tri2 * c) + 1.0);
         self.saw_hz = (hz * exp2f((4.0 * o1 + 5.0 * o2) * (1.0 / 12.0))).min(max_hz);
         let s = self.lpf_lfo.tick(self.f_lpf * c);
         self.lpf.set_lowpass(20.0 * pow_k(LOG2_600, (s + 1.0) * 0.5));
@@ -120,7 +120,7 @@ pub struct Starlids {
     sub_width: f32,
     lanes: Vec<Lane>,
     /// per-lane scratch for one control segment
-    scratch: Vec<[f32; CTRL]>,
+    scratch: Vec<[[f32; CTRL]; GROUP]>,
     moog_lag_noise: Noise0,
     moog_lag: VarLagSine,
     moog_cut: f32,
@@ -150,7 +150,7 @@ impl Starlids {
             sub_tri: LfTri::new(sr, 0.0),
             sub_width: 0.5,
             lanes,
-            scratch: alloc::vec![[0.0; CTRL]; LANES],
+            scratch: alloc::vec![[[0.0; CTRL]; GROUP]; LANES / GROUP],
             moog_lag_noise: Noise0::new(child_rng(&mut rng), sr),
             moog_lag: VarLagSine::new(sr),
             moog_cut: 880.0,
@@ -211,7 +211,8 @@ impl Voice for Starlids {
             // Segment up to the next control tick: every section runs over the
             // whole segment (per-lane state is independent, mix order is fixed),
             // so the output does not depend on how the caller chops blocks.
-            let n = (CTRL - self.pos).min(out.len() - i);
+            // `.min(CTRL)` lets the compiler drop the bounds checks on the CTRL-sized arrays below.
+            let n = (CTRL - self.pos).min(out.len() - i).min(CTRL);
             let mut l = [0.0f32; CTRL];
             let mut r = [0.0f32; CTRL];
             for j in 0..n {
@@ -222,7 +223,7 @@ impl Voice for Starlids {
             pb.mark(prof::OTHER);
             // Lanes in groups of GROUP: the FPU chains of one lane are serial (and the
             // core in-order), so interleaving independent lanes hides the latency.
-            for (lc, bc) in self.lanes.chunks_exact_mut(GROUP).zip(self.scratch.chunks_exact_mut(GROUP)) {
+            for (lc, bc) in self.lanes.as_chunks_mut::<GROUP>().0.iter_mut().zip(self.scratch.iter_mut()) {
                 for j in 0..n {
                     for q in 0..GROUP {
                         bc[q][j] = lc[q].saw.tick_fixed();
@@ -230,7 +231,7 @@ impl Voice for Starlids {
                 }
             }
             pb.mark(prof::SAW);
-            for (lc, bc) in self.lanes.chunks_exact_mut(GROUP).zip(self.scratch.chunks_exact_mut(GROUP)) {
+            for (lc, bc) in self.lanes.as_chunks_mut::<GROUP>().0.iter_mut().zip(self.scratch.iter_mut()) {
                 for j in 0..n {
                     for q in 0..GROUP {
                         bc[q][j] = lc[q].lpf.tick(bc[q][j]);
@@ -238,7 +239,7 @@ impl Voice for Starlids {
                 }
             }
             pb.mark(prof::LPF);
-            for (lc, bc) in self.lanes.chunks_exact_mut(GROUP).zip(self.scratch.chunks_exact_mut(GROUP)) {
+            for (lc, bc) in self.lanes.as_chunks_mut::<GROUP>().0.iter_mut().zip(self.scratch.iter_mut()) {
                 for j in 0..n {
                     for q in 0..GROUP {
                         bc[q][j] = lc[q].delay.tick_fixed(bc[q][j]) * gain;
@@ -246,11 +247,13 @@ impl Voice for Starlids {
                 }
             }
             pb.mark(prof::DELAY);
-            for (ln, buf) in self.lanes.iter().zip(self.scratch.iter()) {
-                let [g0, g1] = ln.gain;
-                for j in 0..n {
-                    l[j] += buf[j] * g0;
-                    r[j] += buf[j] * g1;
+            for (lc, bc) in self.lanes.as_chunks_mut::<GROUP>().0.iter().zip(self.scratch.iter()) {
+                for q in 0..GROUP {
+                    let [g0, g1] = lc[q].gain;
+                    for j in 0..n {
+                        l[j] += bc[q][j] * g0;
+                        r[j] += bc[q][j] * g1;
+                    }
                 }
             }
             pb.mark(prof::MIX);
@@ -261,8 +264,8 @@ impl Voice for Starlids {
                 r[j] = y[1];
             }
             pb.mark(prof::MOOG);
-            for j in 0..n {
-                out[i + j] = [self.hpf[0].tick(l[j]), self.hpf[1].tick(r[j])];
+            for (j, o) in out[i..i + n].iter_mut().enumerate() {
+                *o = [self.hpf[0].tick(l[j]), self.hpf[1].tick(r[j])];
             }
             pb.mark(prof::HPF);
             self.pos = (self.pos + n) % CTRL;

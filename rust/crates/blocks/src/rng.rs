@@ -15,6 +15,7 @@ impl Rng {
         Rng { state: if z == 0 { 0x9E37_79B9_7F4A_7C15 } else { z } }
     }
 
+    #[inline(always)]
     fn next_u64(&mut self) -> u64 {
         let mut x = self.state;
         x ^= x >> 12;
@@ -25,10 +26,12 @@ impl Rng {
     }
 
     /// Uniform in [0, 1).
+    #[inline(always)]
     pub fn f32(&mut self) -> f32 {
         (((self.next_u64() >> 40) as u32) as f32) * (1.0 / 16_777_216.0)
     }
 
+    #[inline(always)]
     pub fn range(&mut self, lo: f32, hi: f32) -> f32 {
         lo + (hi - lo) * self.f32()
     }

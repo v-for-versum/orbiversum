@@ -31,6 +31,7 @@ impl DelayC {
     }
 
     /// Sets the delay time; call when it changes (control rate), then use `tick_fixed`.
+    #[inline(always)]
     pub fn set_delay(&mut self, delay_s: f32) {
         if delay_s != self.delay_c {
             self.delay_c = delay_s;
@@ -45,6 +46,7 @@ impl DelayC {
         }
     }
 
+    #[inline(always)]
     pub fn tick(&mut self, x: f32, delay_s: f32) -> f32 {
         self.set_delay(delay_s);
         self.tick_fixed(x)
