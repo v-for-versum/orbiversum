@@ -79,26 +79,53 @@ impl AudioOut for JcAudio {
             let mut frames = [[0.0f32; 2]; BLOCK_FRAMES];
             let mut pcm = [0i16; BLOCK_FRAMES * 2];
             let period_us = (BLOCK_FRAMES as u64 * 1_000_000) / SAMPLE_RATE as u64;
+            let total = core::mem::size_of_val(&pcm);
             let mut busy_us: u64 = 0;
+            let mut max_us: u64 = 0;
             let mut blocks: u32 = 0;
+            let mut errors: u32 = 0;
+            let mut short: u32 = 0;
+            let mut first_err: esp_err_t = ESP_OK;
+            let mut stack_logged = false;
             loop {
                 let t0 = unsafe { sys::esp_timer_get_time() };
                 render(&mut frames);
                 frames_to_i16(&frames, &mut pcm);
                 let t1 = unsafe { sys::esp_timer_get_time() };
-                busy_us += (t1 - t0) as u64;
+                let dt = (t1 - t0) as u64;
+                busy_us += dt;
+                max_us = max_us.max(dt);
 
                 // Blocks until the DMA queue has room; this paces the loop.
-                let mut written = 0usize;
-                let err = unsafe {
-                    bsp_audio_out_write(
-                        pcm.as_ptr().cast(),
-                        core::mem::size_of_val(&pcm),
-                        &mut written,
-                        u32::MAX,
-                    )
-                };
-                if err != ESP_OK {
+                // A short write is completed with the remainder; if the
+                // driver errors, the rest of the block is dropped (underrun).
+                let base = pcm.as_ptr().cast::<u8>();
+                let mut off = 0usize;
+                let mut failed = false;
+                while off < total {
+                    let mut written = 0usize;
+                    let err = unsafe {
+                        bsp_audio_out_write(
+                            base.add(off).cast(),
+                            total - off,
+                            &mut written,
+                            u32::MAX,
+                        )
+                    };
+                    off += written;
+                    if err != ESP_OK {
+                        errors += 1;
+                        if first_err == ESP_OK {
+                            first_err = err;
+                        }
+                        failed = true;
+                        break;
+                    }
+                    if off < total {
+                        short += 1;
+                    }
+                }
+                if failed {
                     // Do not spin at full priority if the driver rejects writes.
                     unsafe { sys::vTaskDelay(1) };
                 }
@@ -107,9 +134,23 @@ impl AudioOut for JcAudio {
                 if blocks == LOAD_LOG_BLOCKS {
                     // Core-1 audio load = render+convert time / block period.
                     let pct10 = busy_us * 1000 / (period_us * blocks as u64);
-                    log::info!("audio: core1 load {}.{}%", pct10 / 10, pct10 % 10);
+                    let max_pct10 = max_us * 1000 / period_us;
+                    log::info!(
+                        "audio: core1 load mean {}.{}% max {}.{}% ({} us of {} us); write errors {} (first {}), short writes {}",
+                        pct10 / 10, pct10 % 10, max_pct10 / 10, max_pct10 % 10,
+                        max_us, period_us, errors, first_err, short
+                    );
+                    if !stack_logged {
+                        let hw = unsafe { sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut()) };
+                        log::info!("audio: stack high-water mark {} bytes free", hw);
+                        stack_logged = true;
+                    }
                     busy_us = 0;
+                    max_us = 0;
                     blocks = 0;
+                    errors = 0;
+                    short = 0;
+                    first_err = ESP_OK;
                 }
             }
         });
