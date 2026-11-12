@@ -4,6 +4,7 @@
 //! `CTRL` samples at fixed absolute positions, so the output does not
 //! depend on the caller's block size.
 
+use crate::prof;
 use crate::voice::Voice;
 use alloc::vec::Vec;
 use blocks::{
@@ -16,7 +17,14 @@ use blocks::{
     rng::Rng,
 };
 use blocks::fast::tanh;
-use libm::{exp2f, powf};
+use blocks::fast::exp2 as exp2f;
+
+/// 2^x-based replacement for libm::powf with a constant base (f32 only).
+fn pow_k(log2_base: f32, e: f32) -> f32 {
+    exp2f(log2_base * e)
+}
+const LOG2_600: f32 = 9.228_819;
+const LOG2_7_5: f32 = 2.906_890_6;
 
 const CTRL: usize = 32;
 const LANES: usize = 12;
@@ -83,10 +91,10 @@ impl Lane {
         let c = CTRL as f32;
         let o1 = libm::floorf(self.tri1.tick(self.f_tri1 * c) + 1.0);
         let o2 = libm::floorf(self.tri2.tick(self.f_tri2 * c) + 1.0);
-        self.saw_hz = (hz * exp2f((4.0 * o1 + 5.0 * o2) / 12.0)).min(max_hz);
+        self.saw_hz = (hz * exp2f((4.0 * o1 + 5.0 * o2) * (1.0 / 12.0))).min(max_hz);
         let s = self.lpf_lfo.tick(self.f_lpf * c);
-        self.lpf.set_lowpass(20.0 * powf(600.0, (s + 1.0) * 0.5));
-        self.delay_s = (0.02 + 0.01 * self.dly_noise.tick(self.f_dly * c)) / 15.0;
+        self.lpf.set_lowpass(20.0 * pow_k(LOG2_600, (s + 1.0) * 0.5));
+        self.delay_s = (0.02 + 0.01 * self.dly_noise.tick(self.f_dly * c)) * (1.0 / 15.0);
         let p = self.pan_noise.tick(PAN_RATE * c);
         let p = self.pan_lag.tick(p, 3.0 / c);
         self.gain = pan2(1.0, p);
@@ -107,6 +115,8 @@ pub struct Starlids {
     sub_tri: LfTri,
     sub_width: f32,
     lanes: Vec<Lane>,
+    /// per-lane scratch for one control segment
+    scratch: Vec<[f32; CTRL]>,
     moog_lag_noise: Noise0,
     moog_lag: VarLagSine,
     moog_cut: f32,
@@ -136,6 +146,7 @@ impl Starlids {
             sub_tri: LfTri::new(sr, 0.0),
             sub_width: 0.5,
             lanes,
+            scratch: alloc::vec![[0.0; CTRL]; LANES],
             moog_lag_noise: Noise0::new(child_rng(&mut rng), sr),
             moog_lag: VarLagSine::new(sr),
             moog_cut: 880.0,
@@ -158,7 +169,7 @@ impl Starlids {
         }
         let n = self.moog_lag_noise.tick(c * (1.0 / 6.0));
         let x = self.moog_lag.tick(n, 6.0 / c);
-        self.moog_cut = self.hz * 8.0 * powf(7.5, (x + 1.0) * 0.5);
+        self.moog_cut = self.hz * 8.0 * pow_k(LOG2_7_5, (x + 1.0) * 0.5);
     }
 }
 
@@ -177,26 +188,66 @@ impl Voice for Starlids {
     }
 
     fn process(&mut self, out: &mut [[f32; 2]]) {
-        let gain = self.amp / 12.0;
-        for frame in out.iter_mut() {
+        let gain = self.amp * (1.0 / 12.0);
+        let sub_gain = gain * core::f32::consts::FRAC_1_SQRT_2;
+        let mut pb = prof::Block::start();
+        let mut i = 0;
+        while i < out.len() {
             if self.pos == 0 {
                 self.control();
+                pb.mark(prof::CONTROL);
             }
-            self.pos = (self.pos + 1) % CTRL;
-
-            let sub = self.sub.tick(self.hz * 0.5, self.sub_width) * gain * core::f32::consts::FRAC_1_SQRT_2;
-            let (mut l, mut r) = (sub, sub);
-            for ln in self.lanes.iter_mut() {
-                let x = ln.saw.tick(ln.saw_hz);
-                let x = ln.lpf.tick(x);
-                let x = ln.delay.tick(x, ln.delay_s) * gain;
-                l += x * ln.gain[0];
-                r += x * ln.gain[1];
+            // Segment up to the next control tick: every section runs over the
+            // whole segment (per-lane state is independent, mix order is fixed),
+            // so the output does not depend on how the caller chops blocks.
+            let n = (CTRL - self.pos).min(out.len() - i);
+            let mut l = [0.0f32; CTRL];
+            let mut r = [0.0f32; CTRL];
+            for j in 0..n {
+                let sub = self.sub.tick(self.hz * 0.5, self.sub_width) * sub_gain;
+                l[j] = sub;
+                r[j] = sub;
             }
+            pb.mark(prof::OTHER);
+            for (ln, buf) in self.lanes.iter_mut().zip(self.scratch.iter_mut()) {
+                for b in buf[..n].iter_mut() {
+                    *b = ln.saw.tick(ln.saw_hz);
+                }
+            }
+            pb.mark(prof::SAW);
+            for (ln, buf) in self.lanes.iter_mut().zip(self.scratch.iter_mut()) {
+                for b in buf[..n].iter_mut() {
+                    *b = ln.lpf.tick(*b);
+                }
+            }
+            pb.mark(prof::LPF);
+            for (ln, buf) in self.lanes.iter_mut().zip(self.scratch.iter_mut()) {
+                for b in buf[..n].iter_mut() {
+                    *b = ln.delay.tick(*b, ln.delay_s) * gain;
+                }
+            }
+            pb.mark(prof::DELAY);
+            for (ln, buf) in self.lanes.iter().zip(self.scratch.iter()) {
+                let [g0, g1] = ln.gain;
+                for j in 0..n {
+                    l[j] += buf[j] * g0;
+                    r[j] += buf[j] * g1;
+                }
+            }
+            pb.mark(prof::MIX);
             let cut = self.moog_cut;
-            let l = self.hpf[0].tick(self.moog[0].tick(tanh(l), cut, 0.0));
-            let r = self.hpf[1].tick(self.moog[1].tick(tanh(r), cut, 0.0));
-            *frame = [l, r];
+            for j in 0..n {
+                l[j] = self.moog[0].tick(tanh(l[j]), cut, 0.0);
+                r[j] = self.moog[1].tick(tanh(r[j]), cut, 0.0);
+            }
+            pb.mark(prof::MOOG);
+            for j in 0..n {
+                out[i + j] = [self.hpf[0].tick(l[j]), self.hpf[1].tick(r[j])];
+            }
+            pb.mark(prof::HPF);
+            self.pos = (self.pos + n) % CTRL;
+            i += n;
         }
+        pb.finish();
     }
 }

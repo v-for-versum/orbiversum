@@ -1,10 +1,12 @@
 //! Moog ladder filter, Huovilainen model (approximation of SC MoogLadder).
 
 use crate::fast::tanh;
-use libm::expf;
+use crate::fast::exp as expf;
 
 pub struct MoogLadder {
     sr: f32,
+    inv_sr: f32,
+    inv_passes: f32,
     /// oversampling passes per tick (1 or 2)
     passes: usize,
     s: [f32; 4],
@@ -25,17 +27,17 @@ impl MoogLadder {
     /// `passes` ladder iterations per tick (1 = no oversampling, cheaper).
     pub fn with_oversample(sr: f32, passes: usize) -> MoogLadder {
         let passes = passes.clamp(1, 2);
-        MoogLadder { sr, passes, s: [0.0; 4], last: 0.0, ts: [0.0; 4], cached_cutoff: f32::NAN, tune: 0.0, acr: 0.0 }
+        MoogLadder { sr, inv_sr: 1.0 / sr, inv_passes: 1.0 / passes as f32, passes, s: [0.0; 4], last: 0.0, ts: [0.0; 4], cached_cutoff: f32::NAN, tune: 0.0, acr: 0.0 }
     }
 
     /// `res` 0..4; clamped to 3.8 so the ladder always rings out instead of
     /// self-oscillating (the Huovilainen feedback gain is ~4 at oscillation).
     pub fn tick(&mut self, x: f32, cutoff_hz: f32, res: f32) -> f32 {
         if cutoff_hz != self.cached_cutoff {
-            let fc = (cutoff_hz / self.sr).clamp(0.0005, 0.45);
+            let fc = (cutoff_hz * self.inv_sr).clamp(0.0005, 0.45);
             let fcr = 1.8730 * fc * fc * fc + 0.4955 * fc * fc - 0.6490 * fc + 0.9988;
             self.acr = -3.9364 * fc * fc + 1.8409 * fc + 0.9968;
-            self.tune = 1.0 - expf(-2.0 * core::f32::consts::PI * (fc / self.passes as f32) * fcr);
+            self.tune = 1.0 - expf(-2.0 * core::f32::consts::PI * (fc * self.inv_passes) * fcr);
             self.cached_cutoff = cutoff_hz;
         }
         let (tune, acr) = (self.tune, self.acr);

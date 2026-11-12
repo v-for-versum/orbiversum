@@ -26,7 +26,7 @@ impl Rng {
 
     /// Uniform in [0, 1).
     pub fn f32(&mut self) -> f32 {
-        ((self.next_u64() >> 40) as f32) * (1.0 / 16_777_216.0)
+        (((self.next_u64() >> 40) as u32) as f32) * (1.0 / 16_777_216.0)
     }
 
     pub fn range(&mut self, lo: f32, hi: f32) -> f32 {

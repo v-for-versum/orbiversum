@@ -11,6 +11,10 @@ pub struct DelayC {
     mask: usize,
     /// largest delay in samples (as before pow2 rounding)
     max_d: f32,
+    /// delay_s the cached (k, f) belong to (NaN = none)
+    delay_c: f32,
+    k: usize,
+    f: f32,
 }
 
 impl DelayC {
@@ -18,19 +22,23 @@ impl DelayC {
     pub fn new(sr: f32, max_s: f32) -> DelayC {
         let need = (max_s * sr) as usize + 4;
         let len = need.next_power_of_two();
-        DelayC { sr, buf: vec![0.0; len], w: 0, mask: len - 1, max_d: (need - 3) as f32 }
+        DelayC { sr, buf: vec![0.0; len], w: 0, mask: len - 1, max_d: (need - 3) as f32, delay_c: f32::NAN, k: 1, f: 0.0 }
     }
 
     pub fn tick(&mut self, x: f32, delay_s: f32) -> f32 {
         self.buf[self.w] = x;
-        let mut d = (delay_s * self.sr).clamp(1.0, self.max_d);
-        // Snap float noise (e.g. n / sr * sr) so integer delays are exact.
-        let nearest = (d + 0.5) as usize as f32;
-        if (d - nearest).abs() < 1e-3 {
-            d = nearest;
+        if delay_s != self.delay_c {
+            self.delay_c = delay_s;
+            let mut d = (delay_s * self.sr).clamp(1.0, self.max_d);
+            // Snap float noise (e.g. n / sr * sr) so integer delays are exact.
+            let nearest = (d + 0.5) as usize as f32;
+            if (d - nearest).abs() < 1e-3 {
+                d = nearest;
+            }
+            self.k = d as usize; // floor, d >= 1
+            self.f = d - self.k as f32;
         }
-        let k = d as usize; // floor, d >= 1
-        let f = d - k as f32;
+        let (k, f) = (self.k, self.f);
         let (mask, w) = (self.mask, self.w);
         let at = |delay: usize| self.buf[w.wrapping_sub(delay) & mask];
         let y0 = at(k - 1);

@@ -28,6 +28,18 @@ unsafe extern "C" {
 /// UI tick. Short enough for the knob, long enough to leave core 0 mostly idle.
 const TICK: Duration = Duration::from_millis(16);
 
+extern "C" {
+    /// Xtensa CPU cycle counter (ESP-IDF HAL).
+    fn xthal_get_ccount() -> u32;
+}
+
+fn cycles() -> u32 {
+    unsafe { xthal_get_ccount() }
+}
+
+/// CPU cycles per microsecond (CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240).
+const CYCLES_PER_US: u32 = 240;
+
 fn now_us() -> i64 {
     unsafe { sys::esp_timer_get_time() }
 }
@@ -39,11 +51,13 @@ fn main() {
     // Display, touch and knob (the C BSP default set). Audio is brought up by JcBoard.
     let features = BspFeatures { display: true, touch: true, encoder: true, ..Default::default() };
     EspError::convert(unsafe { bsp_init(&features) }).expect("bsp_init failed");
+    log::info!("rust: firmware {}", env!("FW_GIT_DESC"));
     log::info!("rust: bsp ok");
 
     // Takes the panel from LVGL (stopped), allocates the DMA strip buffer, starts audio hardware.
     let mut board = JcBoard::new().expect("board init failed");
 
+    dsp::prof::set_clock(cycles);
     let params = Arc::new(Params::default());
     let seed = now_us() as u64;
     let (audio_halves, mut uis): (Vec<_>, Vec<Box<dyn AppletUi>>) =
@@ -120,6 +134,17 @@ fn main() {
                     board.display_mut().send_errors(),
                     unsafe { sys::heap_caps_get_free_size(sys::MALLOC_CAP_INTERNAL) },
                 );
+            }
+            let (blocks, t) = dsp::prof::take();
+            if blocks > 0 {
+                let mut line = std::string::String::new();
+                let mut total = 0u32;
+                for (name, v) in dsp::prof::NAMES.iter().zip(t.iter()) {
+                    let us = v / CYCLES_PER_US / blocks;
+                    total += us;
+                    line.push_str(&format!(" {name} {us}"));
+                }
+                log::info!("prof: us/block over {blocks} blocks:{line} | sum {total}");
             }
             log::info!("rust: alive, selected {}", disp.selected());
             window_flush_us = 0;

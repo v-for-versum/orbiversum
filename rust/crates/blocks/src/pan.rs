@@ -1,6 +1,6 @@
 //! Equal-power stereo panning (SC Pan2).
 
-use libm::{cosf, sinf};
+use crate::fast::{cos as cosf, sin as sinf};
 
 /// `pos` -1 (left) .. 1 (right).
 pub fn pan2(x: f32, pos: f32) -> [f32; 2] {

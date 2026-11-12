@@ -1,6 +1,6 @@
 //! Oscillators: SawDPW, Pulse, SinOsc, LFTri.
 
-use libm::sinf;
+use crate::fast::sin as sinf;
 
 const TAU: f32 = core::f32::consts::TAU;
 
@@ -12,25 +12,35 @@ fn advance(phase: f32, inc: f32) -> f32 {
 /// Band-limited saw (2nd-order DPW), output -1..1.
 pub struct SawDpw {
     sr: f32,
+    inv_sr: f32,
     /// bipolar phase in [-1, 1)
     x: f32,
     prev_sq: f32,
+    /// hz the cached increments belong to (NaN = none)
+    hz_c: f32,
+    dx: f32,
+    inv_2dx: f32,
 }
 
 impl SawDpw {
     pub fn new(sr: f32) -> SawDpw {
-        SawDpw { sr, x: 0.0, prev_sq: 0.0 }
+        SawDpw { sr, inv_sr: 1.0 / sr, x: 0.0, prev_sq: 0.0, hz_c: f32::NAN, dx: 0.0, inv_2dx: 0.0 }
     }
 
     pub fn tick(&mut self, hz: f32) -> f32 {
-        let dx = 2.0 * hz.abs() / self.sr;
+        if hz != self.hz_c {
+            self.hz_c = hz;
+            self.dx = 2.0 * hz.abs() * self.inv_sr;
+            self.inv_2dx = if self.dx > 1e-9 { 0.5 * crate::fast::recip(self.dx) } else { 0.0 };
+        }
+        let dx = self.dx;
         let mut x = self.x + dx;
         if x >= 1.0 {
             x -= 2.0 * libm::floorf((x + 1.0) * 0.5);
         }
         self.x = x;
         let sq = x * x;
-        let out = if dx > 1e-9 { (sq - self.prev_sq) / (2.0 * dx) } else { x };
+        let out = if dx > 1e-9 { (sq - self.prev_sq) * self.inv_2dx } else { x };
         self.prev_sq = sq;
         out.clamp(-1.0, 1.0)
     }
@@ -38,17 +48,18 @@ impl SawDpw {
 
 pub struct Pulse {
     sr: f32,
+    inv_sr: f32,
     phase: f32,
 }
 
 impl Pulse {
     pub fn new(sr: f32) -> Pulse {
-        Pulse { sr, phase: 0.0 }
+        Pulse { sr, inv_sr: 1.0 / sr, phase: 0.0 }
     }
 
     /// `width` is the duty (0..1); output is +1 while phase < width, else -1.
     pub fn tick(&mut self, hz: f32, width: f32) -> f32 {
-        self.phase = advance(self.phase, hz / self.sr);
+        self.phase = advance(self.phase, hz * self.inv_sr);
         // Arithmetic select: the xtensa LLVM backend ICEs on the constant-pool
         // form of `if .. { 1.0 } else { -1.0 }` (cannot select PCREL_WRAPPER).
         2.0 * ((self.phase < width) as u8 as f32) - 1.0
@@ -57,18 +68,19 @@ impl Pulse {
 
 pub struct SinOsc {
     sr: f32,
+    inv_sr: f32,
     phase: f32,
 }
 
 impl SinOsc {
     /// `phase` in cycles (0..1).
     pub fn new(sr: f32, phase: f32) -> SinOsc {
-        SinOsc { sr, phase: phase - libm::floorf(phase) }
+        SinOsc { sr, inv_sr: 1.0 / sr, phase: phase - libm::floorf(phase) }
     }
 
     pub fn tick(&mut self, hz: f32) -> f32 {
         let out = sinf(self.phase * TAU);
-        self.phase = advance(self.phase, hz / self.sr);
+        self.phase = advance(self.phase, hz * self.inv_sr);
         out
     }
 }
@@ -76,17 +88,18 @@ impl SinOsc {
 /// Naive triangle, -1..1.
 pub struct LfTri {
     sr: f32,
+    inv_sr: f32,
     phase: f32,
 }
 
 impl LfTri {
     pub fn new(sr: f32, phase: f32) -> LfTri {
-        LfTri { sr, phase: phase - libm::floorf(phase) }
+        LfTri { sr, inv_sr: 1.0 / sr, phase: phase - libm::floorf(phase) }
     }
 
     pub fn tick(&mut self, hz: f32) -> f32 {
         let p = self.phase;
-        self.phase = advance(p, hz / self.sr);
+        self.phase = advance(p, hz * self.inv_sr);
         // 0 -> 0, .25 -> 1, .75 -> -1
         if p < 0.25 {
             4.0 * p

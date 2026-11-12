@@ -1,12 +1,13 @@
 //! Slow control-rate-style generators: Noise0, Noise1, VarLagSine.
 
 use crate::rng::Rng;
-use libm::cosf;
+use crate::fast::{self, cos as cosf};
 
 /// Stepped random (LFNoise0): new value in -1..1 `hz` times per second.
 pub struct Noise0 {
     rng: Rng,
     sr: f32,
+    inv_sr: f32,
     phase: f32,
     value: f32,
 }
@@ -14,11 +15,11 @@ pub struct Noise0 {
 impl Noise0 {
     pub fn new(mut rng: Rng, sr: f32) -> Noise0 {
         let value = rng.range(-1.0, 1.0);
-        Noise0 { rng, sr, phase: 0.0, value }
+        Noise0 { rng, sr, inv_sr: 1.0 / sr, phase: 0.0, value }
     }
 
     pub fn tick(&mut self, hz: f32) -> f32 {
-        self.phase += hz / self.sr;
+        self.phase += hz * self.inv_sr;
         if self.phase >= 1.0 {
             self.phase -= libm::floorf(self.phase);
             self.value = self.rng.range(-1.0, 1.0);
@@ -31,6 +32,7 @@ impl Noise0 {
 pub struct Noise1 {
     rng: Rng,
     sr: f32,
+    inv_sr: f32,
     phase: f32,
     from: f32,
     to: f32,
@@ -40,11 +42,11 @@ impl Noise1 {
     pub fn new(mut rng: Rng, sr: f32) -> Noise1 {
         let from = rng.range(-1.0, 1.0);
         let to = rng.range(-1.0, 1.0);
-        Noise1 { rng, sr, phase: 0.0, from, to }
+        Noise1 { rng, sr, inv_sr: 1.0 / sr, phase: 0.0, from, to }
     }
 
     pub fn tick(&mut self, hz: f32) -> f32 {
-        self.phase += hz / self.sr;
+        self.phase += hz * self.inv_sr;
         if self.phase >= 1.0 {
             self.phase -= libm::floorf(self.phase);
             self.from = self.to;
@@ -58,6 +60,7 @@ impl Noise1 {
 /// A target change restarts the ramp from the current value.
 pub struct VarLagSine {
     sr: f32,
+    inv_sr: f32,
     start: f32,
     target: f32,
     pos: f32,
@@ -67,7 +70,7 @@ pub struct VarLagSine {
 
 impl VarLagSine {
     pub fn new(sr: f32) -> VarLagSine {
-        VarLagSine { sr, start: 0.0, target: 0.0, pos: 1.0, value: 0.0, primed: false }
+        VarLagSine { sr, inv_sr: 1.0 / sr, start: 0.0, target: 0.0, pos: 1.0, value: 0.0, primed: false }
     }
 
     pub fn tick(&mut self, target: f32, time_s: f32) -> f32 {
@@ -82,7 +85,7 @@ impl VarLagSine {
             self.pos = 0.0;
         }
         if self.pos < 1.0 {
-            let step = if time_s > 0.0 { 1.0 / (time_s * self.sr) } else { 1.0 };
+            let step = if time_s > 0.0 { fast::recip(time_s * self.sr) } else { 1.0 };
             self.pos = (self.pos + step).min(1.0);
             let w = 0.5 - 0.5 * cosf(self.pos * core::f32::consts::PI);
             self.value = self.start + (self.target - self.start) * w;

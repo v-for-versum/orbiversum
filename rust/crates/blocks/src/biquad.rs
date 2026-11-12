@@ -1,9 +1,11 @@
 //! RBJ cookbook biquads (transposed direct form II).
 
-use libm::{cosf, sinf};
+use crate::fast::{cos as cosf, sin as sinf};
 
 pub struct Biquad {
     sr: f32,
+    inv_sr: f32,
+    inv_2q: f32,
     q: f32,
     b0: f32,
     b1: f32,
@@ -16,18 +18,18 @@ pub struct Biquad {
 
 impl Biquad {
     fn blank(sr: f32, q: f32) -> Biquad {
-        Biquad { sr, q, b0: 1.0, b1: 0.0, b2: 0.0, a1: 0.0, a2: 0.0, z1: 0.0, z2: 0.0 }
+        Biquad { sr, inv_sr: 1.0 / sr, inv_2q: 0.5 / q, q, b0: 1.0, b1: 0.0, b2: 0.0, a1: 0.0, a2: 0.0, z1: 0.0, z2: 0.0 }
     }
 
     fn trig(&self, hz: f32) -> (f32, f32) {
         let hz = hz.clamp(1.0, self.sr * 0.49);
-        let w0 = 2.0 * core::f32::consts::PI * hz / self.sr;
-        let alpha = sinf(w0) / (2.0 * self.q);
+        let w0 = 2.0 * core::f32::consts::PI * hz * self.inv_sr;
+        let alpha = sinf(w0) * self.inv_2q;
         (cosf(w0), alpha)
     }
 
     fn set_coeffs(&mut self, b0: f32, b1: f32, b2: f32, a0: f32, a1: f32, a2: f32) {
-        let inv = 1.0 / a0;
+        let inv = crate::fast::recip(a0);
         self.b0 = b0 * inv;
         self.b1 = b1 * inv;
         self.b2 = b2 * inv;

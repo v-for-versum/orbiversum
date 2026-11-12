@@ -683,6 +683,7 @@ version = "0.1.0"
 dependencies = [
  "applets",
  "board-jc3636k718c",
+ "dsp",
  "embuild",
  "esp-idf-svc",
  "log",
