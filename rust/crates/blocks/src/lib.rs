@@ -2,6 +2,7 @@
 extern crate alloc;
 
 pub mod biquad;
+pub mod comb;
 pub mod delay;
 pub mod fast;
 pub mod env;
@@ -10,5 +11,6 @@ pub mod moog;
 pub mod noise;
 pub mod osc;
 pub mod pan;
+pub mod resonant;
 pub mod rng;
 pub mod seq;
