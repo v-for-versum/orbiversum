@@ -7,3 +7,10 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 # built-in table; the real layout is a follow-up decision.
 # CONFIG_PARTITION_TABLE_CUSTOM is not set
 CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# The legacy I2C driver (components/driver/i2c) gets linked into the Rust image
+# and its start-up constructor aborts when the new driver (used by the BSP) is
+# present: "i2c: CONFLICT! driver_ng is not allowed to be used with this old
+# driver". Nothing here calls the legacy API, so skip the check. Root cause
+# (why the legacy object is pulled in) is not investigated.
+CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y

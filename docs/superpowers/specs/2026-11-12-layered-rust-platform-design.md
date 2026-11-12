@@ -93,8 +93,16 @@ firmware-<board>        бинарник: выбирает плату и спи�
   - Ограничения: кастомная `partitions.csv` не находится (путь считается от каталога сборки `esp-idf-sys`), в спайке
     используется `PARTITION_TABLE_SINGLE_APP_LARGE`; раскладку OTA/storage надо решать отдельно.
     `sdkconfig.jc3636k718c` берётся из корня репозитория (сейчас не закоммичен) как база sdkconfig.
-  - НЕ проверено: прошивка платы и монитор (`rust: bsp ok`, PSRAM, отсутствие перезагрузок) — плата по USB не подключена;
-    поведение `bsp_init` при вызове из Rust на железе неизвестно.
+  - Прошивка и монитор (плата ESP32-S3 rev v0.2, 16 МБ, `/dev/cu.usbmodem2101`, лог через USB-Serial-JTAG):
+    - Первая прошивка: загрузчик и PSRAM в порядке (`esp_psram: Found 8MB PSRAM device`, `Speed: 80MHz`,
+      `Adding pool of 7232K of PSRAM memory to heap allocator`), но дальше перезагрузочный цикл до `app_main`:
+      `E (574) i2c: CONFLICT! driver_ng is not allowed to be used with this old driver` -> `abort() was called` -> `Rebooting...`.
+      Строки `rust: bsp ok` нет. Причина: в образ попал старый I2C-драйвер IDF (`check_i2c_driver_conflict`), а BSP использует новый;
+      почему линкуется старый объект — не выяснено.
+    - Обход: `CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y` в `sdkconfig.defaults`; образ собирается, но НЕ проверен на плате:
+      повторная прошивка не удалась (`Failed to connect to the device`), порт молчит, сброс по DTR/RTS не помогает.
+      Вероятно нужен ручной вход в режим загрузки (BOOT + питание).
+    - Итог: `rust: bsp ok` и «нет перезагрузок» НЕ подтверждены; подтверждены только загрузка, определение PSRAM и сбой старого I2C.
 - Нагрузка на CPU тяжёлых дронов не измерена; оценки только по составу UGen.
 - Замеров FPS дисплея нет; требуется на срезе.
 - Скорость и поведение `fundsp` на Xtensa не проверены; Starlids планируется писать вручную (~150 строк).
