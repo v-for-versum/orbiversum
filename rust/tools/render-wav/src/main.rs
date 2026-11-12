@@ -1,6 +1,6 @@
 //! Host-side renderer: drone voice -> 48 kHz stereo 16-bit WAV.
 
-use dsp::{sine::Sine, starlids::Starlids, voice::Voice};
+use dsp::{eno::Eno, sine::Sine, starlids::Starlids, voice::Voice};
 use std::process::exit;
 
 const SR: u32 = 48_000;
@@ -48,8 +48,9 @@ fn run(a: Args) -> Result<f32, String> {
     let sr = SR as f32;
     let mut voice: Box<dyn Voice> = match a.drone.as_str() {
         "starlids" => Box::new(Starlids::new(a.seed, sr)),
+        "eno" => Box::new(Eno::new(a.seed, sr)),
         "sine" => Box::new(Sine::new(sr)),
-        other => return Err(format!("unknown drone {other} (starlids|sine)")),
+        other => return Err(format!("unknown drone {other} (starlids|sine|eno)")),
     };
     voice.set_sample_rate(sr);
     voice.set_params(a.hz, a.amp);

@@ -129,7 +129,7 @@ fn main() {
             if blocks > 0 {
                 let mut line = std::string::String::new();
                 let mut total = 0u32;
-                for (name, v) in dsp::prof::NAMES.iter().zip(t.iter()) {
+                for (name, v) in dsp::prof::names().iter().zip(t.iter()) {
                     let us = v / CYCLES_PER_US / blocks;
                     total += us;
                     line.push_str(&format!(" {name} {us}"));
@@ -137,7 +137,7 @@ fn main() {
                 log::info!("prof: us/block over {blocks} blocks:{line} | sum {total}");
                 let (wt, w) = dsp::prof::take_worst();
                 let mut wl = std::string::String::new();
-                for (name, v) in dsp::prof::NAMES.iter().zip(w.iter()) {
+                for (name, v) in dsp::prof::names().iter().zip(w.iter()) {
                     wl.push_str(&format!(" {name} {}", v / CYCLES_PER_US));
                 }
                 log::info!("prof: worst block {} us:{wl}", wt / CYCLES_PER_US);

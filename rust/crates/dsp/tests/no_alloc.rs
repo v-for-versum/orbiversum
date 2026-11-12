@@ -20,13 +20,33 @@ unsafe impl GlobalAlloc for Counting {
     }
 }
 
+/// The allocation counter is global: tests that read it must not overlap.
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[global_allocator]
 static A: Counting = Counting;
 
 #[test]
 fn starlids_no_alloc_in_process() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let mut v = Starlids::new(1, 48_000.0);
     v.set_params(110.0, 0.8);
+    let mut buf = [[0.0f32; 2]; 256];
+    v.process(&mut buf);
+    let before = ALLOCS.load(Ordering::SeqCst);
+    for _ in 0..200 {
+        v.process(&mut buf);
+    }
+    v.set_params(220.0, 0.5);
+    v.process(&mut buf);
+    assert_eq!(ALLOCS.load(Ordering::SeqCst) - before, 0);
+}
+
+#[test]
+fn eno_no_alloc_in_process() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let mut v = dsp::eno::Eno::new(1, 48_000.0);
+    v.set_params(330.0, 0.8);
     let mut buf = [[0.0f32; 2]; 256];
     v.process(&mut buf);
     let before = ALLOCS.load(Ordering::SeqCst);

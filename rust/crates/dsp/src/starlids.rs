@@ -220,6 +220,7 @@ impl Voice for Starlids {
     fn process(&mut self, out: &mut [[f32; 2]]) {
         let gain = self.amp * (1.0 / 12.0);
         let sub_gain = gain * core::f32::consts::FRAC_1_SQRT_2;
+        prof::set_names(&prof::NAMES);
         let mut pb = prof::Block::start();
         let mut i = 0;
         while i < out.len() {

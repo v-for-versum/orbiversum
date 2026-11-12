@@ -19,6 +19,25 @@ pub const OTHER: usize = 7;
 /// Section names, same order as the totals.
 pub const NAMES: [&str; SECTIONS] = ["control", "saw", "lpf", "delay", "mix", "moog", "hpf", "sub+other"];
 
+/// Names of the active voice's sections (address of a `'static` array; 0 = `NAMES`).
+static ACTIVE_NAMES: AtomicUsize = AtomicUsize::new(0);
+
+/// Selects the section names the firmware prints (the voice calls this from `process`).
+pub fn set_names(names: &'static [&'static str; SECTIONS]) {
+    ACTIVE_NAMES.store(names as *const _ as usize, Ordering::Relaxed);
+}
+
+/// Names of the voice that ran last (default `NAMES`).
+pub fn names() -> &'static [&'static str; SECTIONS] {
+    let p = ACTIVE_NAMES.load(Ordering::Relaxed);
+    if p == 0 {
+        &NAMES
+    } else {
+        // SAFETY: only `set_names` stores here, and it stores the address of a `'static` array.
+        unsafe { &*(p as *const [&'static str; SECTIONS]) }
+    }
+}
+
 static CLOCK: AtomicUsize = AtomicUsize::new(0);
 static TOTALS: [AtomicU32; SECTIONS] = [const { AtomicU32::new(0) }; SECTIONS];
 static BLOCKS: AtomicU32 = AtomicU32::new(0);
@@ -128,4 +147,18 @@ pub fn take() -> (u32, [u32; SECTIONS]) {
         *o = t.swap(0, Ordering::Relaxed);
     }
     (BLOCKS.swap(0, Ordering::Relaxed), out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static OTHER_NAMES: [&str; SECTIONS] = ["a", "b", "c", "d", "e", "f", "g", "h"];
+
+    #[test]
+    fn names_default_and_switch() {
+        assert_eq!(names(), &NAMES);
+        set_names(&OTHER_NAMES);
+        assert_eq!(names(), &OTHER_NAMES);
+    }
 }
