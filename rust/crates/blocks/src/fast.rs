@@ -22,6 +22,16 @@ pub fn recip_fast(d: f32) -> f32 {
     y
 }
 
+/// Cheaper saturator for the ladder stages: x(27+x^2)/(27+9x^2), input clamped to +-3
+/// (exactly +-1 at the clamp). Max error vs tanh ~2% (shape differs slightly near |x|~1.5),
+/// odd, monotonic, bounded; one reciprocal and ~4 dependent ops fewer than `tanh`.
+#[inline(always)]
+pub fn tanh_cheap(x: f32) -> f32 {
+    let x = x.clamp(-3.0, 3.0);
+    let x2 = x * x;
+    x * (27.0 + x2) * recip_fast(27.0 + 9.0 * x2)
+}
+
 /// Padé [7/6] approximation of `tanh`, input clamped to ±4.9.
 ///
 /// Odd, monotonic, bounded by ±1, continuous. Max abs error against
@@ -155,6 +165,22 @@ mod tests {
         }
         assert_eq!(floor(-2.0), -2.0);
         assert_eq!(floor(0.0), 0.0);
+    }
+
+    #[test]
+    fn tanh_cheap_properties() {
+        let mut worst = 0.0f32;
+        let mut prev = tanh_cheap(-10.0);
+        for i in -100_000..=100_000 {
+            let x = i as f32 / 10_000.0;
+            let y = tanh_cheap(x);
+            worst = worst.max((y - libm::tanhf(x)).abs());
+            assert!(y >= prev - 1e-6 && y.abs() <= 1.0, "{x}");
+            assert_eq!(tanh_cheap(-x), -y);
+            prev = y;
+        }
+        assert!(worst < 0.03, "max error {worst}");
+        assert_eq!(tanh_cheap(0.0), 0.0);
     }
 
     #[test]

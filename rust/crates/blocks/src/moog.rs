@@ -1,6 +1,6 @@
 //! Moog ladder filter, Huovilainen model (approximation of SC MoogLadder).
 
-use crate::fast::tanh;
+use crate::fast::tanh_cheap as tanh;
 use crate::fast::exp as expf;
 
 pub struct MoogLadder {
@@ -180,12 +180,12 @@ mod tests {
 
     #[test]
     fn matches_reference_res0() {
-        compare(0.0, 2e-3);
+        compare(0.0, 3e-2);
     }
 
     #[test]
     fn matches_reference_res_positive() {
-        compare(1.5, 5e-3);
+        compare(1.5, 6e-2);
     }
 
     #[test]
