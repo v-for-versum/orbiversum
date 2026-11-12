@@ -13,9 +13,10 @@ pub struct BspPanel {
 }
 
 fn alloc_strip() -> *mut u16 {
-    unsafe {
+    let p = unsafe {
         sys::heap_caps_malloc(STRIP_PIXELS * 2, sys::MALLOC_CAP_DMA | sys::MALLOC_CAP_INTERNAL | sys::MALLOC_CAP_8BIT)
-    } as *mut u16
+    };
+    p as *mut u16
 }
 
 impl BspPanel {
