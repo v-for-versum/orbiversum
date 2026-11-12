@@ -57,7 +57,8 @@ fn eno_output_finite_and_bounded() {
         assert!(s.is_finite());
         peak = peak.max(s.abs());
     }
-    assert!(peak < 1.5, "peak {peak}");
+    // pad is tanh-bounded; the note layers add headroom (peak ~1.56 at amp 1)
+    assert!(peak < 2.5, "peak {peak}");
     assert!(peak > 0.01, "silent: {peak}");
 }
 
@@ -76,4 +77,38 @@ fn eno_handles_extreme_hz() {
 fn eno_amp_zero_is_silent() {
     let out = render(3, 330.0, 0.0, 48_000, 128);
     assert!(out.iter().flatten().all(|&x| x == 0.0));
+}
+
+#[test]
+fn eno_notes_audible_over_time() {
+    let out = render(5, 330.0, 1.0, 60 * 48_000, 512);
+    let rms: Vec<f32> = out[5 * 48_000..]
+        .chunks(48_000)
+        .map(|w| (w.iter().map(|x| x[0] * x[0]).sum::<f32>() / w.len() as f32).sqrt())
+        .collect();
+    let max = rms.iter().cloned().fold(0.0f32, f32::max);
+    let min = rms.iter().cloned().fold(f32::MAX, f32::min);
+    assert!(min > 0.0, "silent window");
+    assert!(max / min > 1.5, "no variation: min {min} max {max}");
+}
+
+#[test]
+fn eno_extreme_hz_with_notes() {
+    for hz in [8.0f32, 20_000.0, 1e9] {
+        let out = render(9, hz, 1.0, 20 * 48_000, 512);
+        assert!(out.iter().flatten().all(|x| x.is_finite() && x.abs() < 10.0), "hz {hz}");
+    }
+}
+
+#[test]
+fn eno_determinism_and_block_size_still_hold() {
+    let n = 30 * 48_000;
+    let base = render(4, 330.0, 0.8, n, 128);
+    assert_eq!(base, render(4, 330.0, 0.8, n, 128));
+    for b in [1usize, 37] {
+        let o = render(4, 330.0, 0.8, n, b);
+        for (k, (x, y)) in base.iter().zip(o.iter()).enumerate() {
+            assert!((x[0] - y[0]).abs() <= 1e-5 && (x[1] - y[1]).abs() <= 1e-5, "block {b} sample {k}");
+        }
+    }
 }

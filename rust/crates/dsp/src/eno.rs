@@ -9,15 +9,17 @@ use crate::voice::Voice;
 use alloc::vec::Vec;
 use blocks::{
     biquad::Biquad,
-    comb::DelayL,
-    env::EnvPerc,
-    fast::{exp2, tanh},
+    comb::{CombL, DelayL},
+    env::{Decay2, EnvPerc},
+    fast::{exp2, recip, tanh},
     lfo::{Noise0, Noise1, VarLagSine},
-    moog::MoogStereo,
-    osc::{SawDpw, SinOsc},
+    moog::{MoogLadder, MoogStereo},
+    noise::Noise2,
+    osc::{Pulse, SawDpw, SinOsc},
     pan::pan2,
+    resonant::RLpf,
     rng::Rng,
-    seq::{Dust, Dxrand, Impulse, TDelay},
+    seq::{Dseq, Dust, Dxrand, Impulse, TChoose, TDelay},
 };
 
 pub const P_CONTROL: usize = 0;
@@ -43,6 +45,19 @@ const LOG2_5: f32 = 2.321_928_1;
 const LOG2_30: f32 = 4.906_890_6;
 /// LFNoise0.kr(1/3) for the pan.
 const PAN_RATE: f32 = 1.0 / 3.0;
+
+/// Note-rate choices ([0.02,0.05,1,2,0.5,0.25,2] / 2).
+const NOTE_RATES: [f32; 7] = [0.01, 0.025, 0.5, 1.0, 0.25, 0.125, 1.0];
+const AIRPORTS: &[&[i8]] = &[
+    &[5, 7, 4, 2, 0, 12, 7, 5, 7, 4, 2, 0],
+    &[5, 7, 4, 2, 0, 12, 4, 7, 5, 0],
+    &[-5, 2, 0, 4, 7, 12, 5, 2, 7, 4, 0, 7, 2, 5, 5, 2, 4, 0],
+    &[7, 7, 2, 4, 4, 4, 2, 0, 7, 0, 0],
+];
+const TUNE_UP: f32 = 1.0005;
+const TUNE_DOWN: f32 = 0.9996;
+const STRING_DECAY: f32 = 6.0;
+const PIANO_MAX_DELAY_S: f32 = 0.025;
 
 const PLANES: [[i8; 4]; 4] = [[0, 4, 7, 12], [4, 7, 11, 16], [-3, 0, 4, 7], [-3, 0, 5, 9]];
 
@@ -136,6 +151,44 @@ pub struct Eno {
     moog_lag: VarLagSine,
     moog_cut: f32,
     moog: MoogStereo,
+    // notes
+    note_dust: Dust,
+    note_imp0: Impulse,
+    note_pick: TChoose,
+    note_mul: f32,
+    noterate: f32,
+    notepulse: Impulse,
+    seq_dust: Dust,
+    seq_imp0: Impulse,
+    seq_pick: Dxrand,
+    seq_idx: usize,
+    dseq: Dseq,
+    seqnote: i8,
+    /// a note pulse fired at the start of the current control step; consumed by the first segment
+    note_trig: bool,
+    // piano
+    piano_noise_hz_n: Noise0,
+    piano_noise_hz_lag: VarLagSine,
+    noise_hz: f32,
+    noise2: Noise2,
+    decay2: Decay2,
+    combs: [CombL; 2],
+    piano_hz: f32,
+    piano_lpf: RLpf,
+    piano_hpf: Biquad,
+    // PolyPerc
+    pulse: Pulse,
+    perc_moog: MoogLadder,
+    perc_env: EnvPerc,
+    perc_hz: f32,
+    perc_cut: f32,
+    env_prev: f32,
+    env_cur: f32,
+    // layer mix
+    mix_noise: Noise0,
+    mix_lfo: SinOsc,
+    piano_g: f32,
+    perc_g: f32,
 }
 
 impl Eno {
@@ -153,6 +206,15 @@ impl Eno {
             voices.push(PadVoice::new(&mut rng, sr));
         }
         let moog_noise = Noise0::new(child_rng(&mut rng), sr);
+        // note layer RNGs are drawn after the pad's, so the pad is unchanged
+        let note_dust = Dust::new(child_rng(&mut rng));
+        let note_pick = TChoose::new(child_rng(&mut rng));
+        let note_mul = rng.range(0.78, 1.32);
+        let seq_dust = Dust::new(child_rng(&mut rng));
+        let seq_pick = Dxrand::new(child_rng(&mut rng), AIRPORTS.len());
+        let piano_noise_hz_n = Noise0::new(child_rng(&mut rng), sr);
+        let noise2 = Noise2::new(child_rng(&mut rng), sr);
+        let mix_noise = Noise0::new(child_rng(&mut rng), sr);
         let mut s = Eno {
             seed,
             sr,
@@ -183,6 +245,39 @@ impl Eno {
             moog_lag: VarLagSine::new(sr),
             moog_cut: 660.0,
             moog: MoogStereo::with_oversample(sr, 1),
+            note_dust,
+            note_imp0: Impulse::new(),
+            note_pick,
+            note_mul,
+            noterate: 0.5,
+            notepulse: Impulse::new(),
+            seq_dust,
+            seq_imp0: Impulse::new(),
+            seq_pick,
+            seq_idx: 0,
+            dseq: Dseq::new(),
+            seqnote: 0,
+            note_trig: false,
+            piano_noise_hz_n,
+            piano_noise_hz_lag: VarLagSine::new(sr),
+            noise_hz: 3500.0,
+            noise2,
+            decay2: Decay2::new(sr, 0.01, 1.0),
+            combs: [CombL::new(sr, PIANO_MAX_DELAY_S), CombL::new(sr, PIANO_MAX_DELAY_S)],
+            piano_hz: f32::NAN,
+            piano_lpf: RLpf::new(sr),
+            piano_hpf: Biquad::highpass(sr, 40.0, Q_BUTTERWORTH),
+            pulse: Pulse::new(sr),
+            perc_moog: MoogLadder::with_oversample(sr, 1),
+            perc_env: EnvPerc::new(0.01, 4.0, 1.0, -4.0),
+            perc_hz: 330.0,
+            perc_cut: 495.0,
+            env_prev: 0.0,
+            env_cur: 0.0,
+            mix_noise,
+            mix_lfo: SinOsc::new(sr, 0.0),
+            piano_g: 0.0,
+            perc_g: 0.0,
         };
         s.set_params(hz, amp);
         prof::note_addr(0, s.voices[0].delay.buf_ptr());
@@ -227,6 +322,51 @@ impl Eno {
         let n = self.moog_noise.tick(c * (1.0 / 6.0));
         let x = self.moog_lag.tick(n, 6.0 / c);
         self.moog_cut = (hz * 2.0 * exp2(LOG2_30 * (x + 1.0) * 0.5)).min(self.max_hz);
+        self.note_control();
+    }
+
+    /// Note layer control step: note rate, sequence, pitches, layer mix.
+    fn note_control(&mut self) {
+        let c = CTRL as f32;
+        let dt = self.dt;
+        let hz = self.hz;
+        // noterate: TChoose on Dust(1) + Impulse(0)
+        if self.note_dust.tick(1.0, dt) | self.note_imp0.tick(0.0, dt) {
+            self.noterate = self.note_pick.pick(&NOTE_RATES) * self.note_mul;
+        }
+        // current sequence: Dxrand on Dust(0.1) + Impulse(0)
+        if self.seq_dust.tick(0.1, dt) | self.seq_imp0.tick(0.0, dt) {
+            self.seq_idx = self.seq_pick.next();
+            self.dseq.reset();
+        }
+        self.note_trig = self.notepulse.tick(self.noterate, dt);
+        if self.note_trig {
+            self.seqnote = self.dseq.next(AIRPORTS[self.seq_idx]);
+            self.perc_env.trigger();
+        }
+        let sn = self.seqnote as f32;
+        // piano
+        let n = self.piano_noise_hz_n.tick(c * 0.1);
+        let x = self.piano_noise_hz_lag.tick(n, 10.0 / c);
+        self.noise_hz = 3500.0 + 1500.0 * x;
+        let ph = (hz * exp2((sn - 12.0) * (1.0 / 12.0))).clamp(40.0, 2000.0);
+        if ph != self.piano_hz {
+            self.piano_hz = ph;
+            let inv = recip(ph);
+            self.combs[0].set(inv * recip(TUNE_UP), STRING_DECAY);
+            self.combs[1].set(inv * recip(TUNE_DOWN), STRING_DECAY);
+            self.piano_lpf.set(2.0 * ph, 4.0);
+        }
+        // PolyPerc
+        self.perc_hz = (hz * exp2(sn * (1.0 / 12.0))).min(self.max_hz);
+        self.perc_cut = (hz * 1.5).min(self.max_hz);
+        self.env_prev = self.env_cur;
+        self.env_cur = self.perc_env.tick(dt);
+        // layer crossfade
+        let rate = 0.055 + 0.045 * self.mix_noise.tick(c * 0.1);
+        let w = 0.5 + 0.4 * self.mix_lfo.tick(rate * c);
+        self.piano_g = 0.3 * (1.0 - w);
+        self.perc_g = w;
     }
 }
 
@@ -309,8 +449,37 @@ impl Voice for Eno {
                 r[j] = y[1];
             }
             pb.mark(P_MOOG);
+            // piano: noise burst -> two tuned combs -> RLPF -> HPF
+            let mut nm = [0.0f32; CTRL];
+            let pg = amp * self.piano_g;
+            let mut trig = 0.0f32;
+            if self.pos == 0 && self.note_trig {
+                trig = 1.0;
+            }
+            let nhz = self.noise_hz;
+            for j in 0..n {
+                let e = self.decay2.tick(trig);
+                trig = 0.0;
+                let x = self.noise2.tick(nhz) * e;
+                let s = self.combs[0].tick(x) + self.combs[1].tick(x);
+                nm[j] = self.piano_hpf.tick(self.piano_lpf.tick(s)) * pg;
+            }
+            pb.mark(P_PIANO);
+            // PolyPerc: pulse -> Moog -> control-rate envelope ramped over the step
+            let (e0, e1) = (self.env_prev, self.env_cur);
+            if e0 != 0.0 || e1 != 0.0 {
+                let (hzp, cut, pw) = (self.perc_hz, self.perc_cut, self.perc_g);
+                let inc = (e1 - e0) * (1.0 / CTRL as f32);
+                let mut e = e0 + inc * (self.pos + 1) as f32;
+                for v in nm[..n].iter_mut() {
+                    let p = self.pulse.tick(hzp, 0.5);
+                    *v += self.perc_moog.tick(p, cut, 2.0) * e * pw;
+                    e += inc;
+                }
+            }
+            pb.mark(P_PERC);
             for (j, o) in out[i..i + n].iter_mut().enumerate() {
-                *o = [l[j] * amp, r[j] * amp];
+                *o = [(l[j] + nm[j]) * amp, (r[j] + nm[j]) * amp];
             }
             pb.mark(P_FINAL);
             self.pos = (self.pos + n) % CTRL;

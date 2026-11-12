@@ -52,8 +52,8 @@ fn eno_no_alloc_in_process() {
     let mut buf = [[0.0f32; 2]; 256];
     v.process(&mut buf);
     let before = ALLOCS.with(|a| a.get());
-    // 4 s of blocks after warm-up: covers the first plane switch (~3 s)
-    for _ in 0..(4 * 48_000 / 256 + 1) {
+    // 2000 blocks (~10.7 s): covers the first plane switch (~3 s) and note triggers
+    for _ in 0..2000 {
         v.process(&mut buf);
     }
     v.set_params(220.0, 0.5);
