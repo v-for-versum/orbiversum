@@ -1,12 +1,12 @@
-//! Lightweight Freeverb (as SC FreeVerb): per channel 4 lowpass-feedback combs
-//! in parallel, then 2 allpasses in series. Channels are independent.
+//! Lightweight Freeverb (as SC FreeVerb): per channel 3 lowpass-feedback combs
+//! in parallel, then 1 allpass in series. Channels are independent.
 //! Buffers have exact lengths and indices wrap by compare (no modulo, no division in `tick`).
 
 use alloc::vec;
 use alloc::vec::Vec;
 
-const COMB_LEN: [usize; 4] = [1116, 1277, 1422, 1557];
-const AP_LEN: [usize; 2] = [556, 341];
+const COMB_LEN: [usize; 3] = [1116, 1277, 1422];
+const AP_LEN: [usize; 1] = [556];
 const FIXED_GAIN: f32 = 0.015;
 const AP_FB: f32 = 0.5;
 
@@ -62,8 +62,8 @@ impl Allpass {
 }
 
 struct Channel {
-    combs: [Comb; 4],
-    aps: [Allpass; 2],
+    combs: [Comb; 3],
+    aps: [Allpass; 1],
 }
 
 impl Channel {
@@ -73,9 +73,8 @@ impl Channel {
                 Comb::new(scaled(COMB_LEN[0], sr)),
                 Comb::new(scaled(COMB_LEN[1], sr)),
                 Comb::new(scaled(COMB_LEN[2], sr)),
-                Comb::new(scaled(COMB_LEN[3], sr)),
             ],
-            aps: [Allpass::new(scaled(AP_LEN[0], sr)), Allpass::new(scaled(AP_LEN[1], sr))],
+            aps: [Allpass::new(scaled(AP_LEN[0], sr))],
         }
     }
 
