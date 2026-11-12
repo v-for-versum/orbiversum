@@ -15,7 +15,8 @@ use blocks::{
     pan::pan2,
     rng::Rng,
 };
-use libm::{exp2f, powf, tanhf};
+use blocks::fast::tanh;
+use libm::{exp2f, powf};
 
 const CTRL: usize = 32;
 const LANES: usize = 12;
@@ -193,8 +194,8 @@ impl Voice for Starlids {
                 r += x * ln.gain[1];
             }
             let cut = self.moog_cut;
-            let l = self.hpf[0].tick(self.moog[0].tick(tanhf(l), cut, 0.0));
-            let r = self.hpf[1].tick(self.moog[1].tick(tanhf(r), cut, 0.0));
+            let l = self.hpf[0].tick(self.moog[0].tick(tanh(l), cut, 0.0));
+            let r = self.hpf[1].tick(self.moog[1].tick(tanh(r), cut, 0.0));
             *frame = [l, r];
         }
     }
