@@ -5,7 +5,6 @@
 //! `Scene` holds the animation state (stepped at 5 Hz by [`Scene::tick`]) and
 //! draws itself into any `DrawTarget`; the caller clips the target to the
 //! rectangles from [`Scene::dirty_rects`] to repaint only what moves.
-#![allow(dead_code)] // used by SceneUi in the next task
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{Circle, Line, PrimitiveStyle, Rectangle};
@@ -19,6 +18,7 @@ const FRAME_US: i64 = 200_000;
 const LEVEL: u8 = 5;
 
 /// Where the scene lives on the screen (128x64 original pixels at 2x).
+#[cfg(test)]
 pub(crate) const SCENE_RECT: Rectangle = Rectangle::new(ORIGIN, Size::new(128 * SCALE as u32, 64 * SCALE as u32));
 
 const HOME: (i32, i32) = (25, 25);
@@ -135,10 +135,12 @@ impl Scene {
     }
 
     /// The lead bird's position (original pixels).
+    #[cfg(test)]
     pub(crate) fn bird_pos(&self) -> (i32, i32) {
         self.drift
     }
 
+    #[cfg(test)]
     pub(crate) fn uap_active(&self) -> bool {
         self.uap_seg.is_some()
     }

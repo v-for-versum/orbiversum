@@ -51,7 +51,7 @@ fn main() {
     let params = Arc::new(Params::default());
     let seed = now_us() as u64;
     let (audio_halves, mut uis): (Vec<_>, Vec<Box<dyn AppletUi>>) =
-        orbiversum_apps::all(seed, DEFAULT_SAMPLE_RATE as f32, params.clone()).into_iter().unzip();
+        orbiversum_apps::all(seed, DEFAULT_SAMPLE_RATE as f32, params.clone(), now_us).into_iter().unzip();
     let mut disp = Dispatcher::with_params(audio_halves, params);
     let mut path = disp.take_audio();
     board
@@ -61,7 +61,7 @@ fn main() {
     log::info!("rust: audio started");
 
     let names: Vec<&'static str> = (0..disp.len()).map(|i| disp.info(i).unwrap().name).collect();
-    let groups = vec![Group { name: "dronecaster", items: (0..names.len()).collect() }];
+    let groups = orbiversum_apps::groups().into_iter().map(|(name, items)| Group { name, items }).collect();
     let mut menu = Menu::new(names, groups);
 
     let psram = unsafe { sys::heap_caps_get_total_size(sys::MALLOC_CAP_SPIRAM) };
