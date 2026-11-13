@@ -11,22 +11,19 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use dronecaster_eno::Eno;
 use dronecaster_starlids::Starlids;
-use embedded_graphics::mono_font::{ascii::{FONT_10X20, FONT_6X10}, MonoTextStyle};
+use embedded_graphics::mono_font::{ascii::FONT_10X20, MonoTextStyle};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::{Alignment, Baseline, Text, TextStyleBuilder};
-use orbiversum_os::{Applet, AppletInfo, AppletUi, Canvas, Dirty, InputEvent, Params, ParamUi, VoiceApplet};
+use orbiversum_os::{Applet, AppletInfo, AppletUi, Canvas, Dirty, Glyph, InputEvent, Params, ParamUi, VoiceApplet, GLYPH};
 use scene::Scene;
 
 /// Where the hz/amp line is drawn (10x20 font), right under the scene.
 const TEXT_ROW: Rectangle = Rectangle::new(Point::new(60, 198), Size::new(240, 26));
-/// Static hints, painted with the full repaint: what the knob does, how to
-/// leave, and what a tap on the top / bottom half does (see `ParamUi::input`).
-const KNOB_ROW: Rectangle = Rectangle::new(Point::new(90, 230), Size::new(180, 12));
-const HINT_ROW: Rectangle = Rectangle::new(Point::new(90, 244), Size::new(180, 12));
-const TOP_ROW: Rectangle = Rectangle::new(Point::new(110, 22), Size::new(140, 12));
-const BOTTOM_ROW: Rectangle = Rectangle::new(Point::new(110, 326), Size::new(140, 12));
+/// Knob glyph, centred under the value line; drawn with the full repaint like
+/// the tap-zone glyphs of [`ParamUi::ZONES`]. None of them overlaps the scene.
+const KNOB_GLYPH: Rectangle = Rectangle::new(Point::new(172, 232), Size::new(GLYPH, GLYPH));
 
 /// UI half of a dronecaster voice: the animated `classic` scene with an
 /// hz/amp line under it. Input is handled like [`ParamUi`] (knob = semitones,
@@ -55,18 +52,11 @@ impl SceneUi {
         let _ = Text::with_text_style(&s, at, style, ts).draw(&mut row);
     }
 
-    fn paint_hints(d: &mut Canvas<'_>) {
-        let style = MonoTextStyle::new(&FONT_6X10, Rgb565::new(16, 32, 16));
-        let ts = TextStyleBuilder::new().alignment(Alignment::Center).baseline(Baseline::Top).build();
-        for (row, s) in [
-            (TOP_ROW, "^ tap: amp +"),
-            (KNOB_ROW, "knob: hz"),
-            (HINT_ROW, "press long to exit"),
-            (BOTTOM_ROW, "v tap: amp -"),
-        ] {
-            let at = row.top_left + Point::new(row.size.width as i32 / 2, 1);
-            let _ = Text::with_text_style(s, at, style, ts).draw(d);
+    fn paint_glyphs(d: &mut Canvas<'_>) {
+        for z in ParamUi::ZONES {
+            z.paint(d);
         }
+        Glyph::Knob.paint(d, KNOB_GLYPH);
     }
 }
 
@@ -90,7 +80,7 @@ impl AppletUi for SceneUi {
                 let _ = d.clear(Rgb565::BLACK);
                 self.scene.draw_all(d);
                 self.paint_text(d);
-                Self::paint_hints(d);
+                Self::paint_glyphs(d);
                 dirty.set_full();
                 self.scene.reset();
             }
@@ -134,6 +124,13 @@ pub fn all(
 /// Menu groups over the indices of [`all`]: (group name, applet indices in display order).
 pub fn groups() -> Vec<(&'static str, Vec<usize>)> {
     alloc::vec![("dronecaster", alloc::vec![1, 0])]
+}
+
+#[cfg(test)]
+fn glyph_rects() -> Vec<Rectangle> {
+    let mut v: Vec<Rectangle> = ParamUi::ZONES.iter().map(|z| z.glyph_rect()).collect();
+    v.push(KNOB_GLYPH);
+    v
 }
 
 #[cfg(test)]
@@ -224,15 +221,28 @@ mod tests {
     }
 
     #[test]
-    fn full_paint_shows_the_exit_hint() {
+    fn full_paint_draws_glyphs_not_text_hints() {
         let (_, mut ui) = eno();
         let mut s = Rec::new();
         draw(&mut ui, &mut s);
-        assert!(s.px.iter().any(|p| HINT_ROW.contains(*p)), "hint text drawn in HINT_ROW");
         assert!(s.px.iter().any(|p| TEXT_ROW.contains(*p)), "values drawn in TEXT_ROW");
         assert!(TEXT_ROW.size.height >= 20, "values use the 10x20 font");
-        for (name, row) in [("top tap label", TOP_ROW), ("bottom tap label", BOTTOM_ROW), ("knob label", KNOB_ROW)] {
-            assert!(s.px.iter().any(|p| row.contains(*p)), "{name} drawn");
+        let rects = glyph_rects();
+        assert_eq!(rects.len(), 3, "plus, minus and knob");
+        for r in rects {
+            assert!(s.px.iter().any(|p| r.contains(*p)), "glyph at {r:?} drawn");
+        }
+    }
+
+    #[test]
+    fn scene_never_redraws_over_a_glyph() {
+        // Glyphs are painted once, with the full repaint; this holds only while
+        // no animated region reaches them.
+        let scene = Scene::new(1);
+        for g in glyph_rects() {
+            for r in scene.dirty_rects() {
+                assert!(r.intersection(&g).is_zero_sized(), "{r:?} overlaps glyph {g:?}");
+            }
         }
     }
 

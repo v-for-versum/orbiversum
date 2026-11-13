@@ -2,7 +2,7 @@
 //! hit-test and the glyph that tells the user about it. Glyphs are placed from
 //! the geometry of the round screen, not by hand.
 use embedded_graphics::draw_target::DrawTargetExt;
-use embedded_graphics::geometry::{Angle, AngleUnit};
+use embedded_graphics::geometry::AngleUnit;
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{Arc, Line, PrimitiveStyle, Rectangle, Triangle};
