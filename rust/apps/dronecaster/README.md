@@ -17,6 +17,8 @@ the block size the caller uses.
 | `dronecaster-starlids` (`starlids/`) | `Starlids` | Twelve detuned saw lanes drifting in 4- and 5-semitone steps, slow lowpass, phasing delay and pan per lane, a sub pulse, a Moog ladder and a highpass. |
 | `dronecaster-eno` (`eno/`) | `Eno` | An evolving pad of eight voices on changing chord planes with sub sines, a Moog ladder, Klank resonators, a sparse piano string and PolyPerc note layer, and a reverb. |
 
+On the board both voices show the dronecaster `classic` scene (antenna, blinking lights, birds, wind, rare UAP) as line art, ported from the original `classic.lua` (`apps/registry/src/scene.rs`), and sit in the `dronecaster` group of the two-level menu (hold to open, knob to move, tap right to enter or select, tap left to go back).
+
 Details of the signal flow, the control rate and the CPU budget are in the crate docs; build them
 with `cargo doc --no-deps -p dronecaster-eno -p dronecaster-starlids --open` from `rust/`.
 

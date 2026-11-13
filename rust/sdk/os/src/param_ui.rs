@@ -6,7 +6,7 @@ use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::{Baseline, Text};
-use crate::{AppletInfo, AppletUi, Canvas, Dirty, InputEvent, Params};
+use crate::{AppletInfo, AppletUi, Canvas, Dirty, Edge, Glyph, InputEvent, Params, TapZone};
 
 /// Lowest frequency the knob can set, Hz.
 pub const MIN_HZ: f32 = 20.0;
@@ -32,6 +32,12 @@ pub struct ParamUi {
 }
 
 impl ParamUi {
+    /// Tap zones: the top half raises `amp`, the bottom half lowers it.
+    pub const ZONES: [TapZone; 2] = [
+        TapZone::new(Rectangle::new(Point::new(0, 0), Size::new(360, 180)), Edge::Top, Glyph::Plus),
+        TapZone::new(Rectangle::new(Point::new(0, 180), Size::new(360, 180)), Edge::Bottom, Glyph::Minus),
+    ];
+
     /// A UI called `name` editing `params`.
     pub fn new(name: &'static str, params: Arc<Params>) -> ParamUi {
         ParamUi { name, params, drawn: None }
@@ -55,9 +61,14 @@ impl AppletUi for ParamUi {
                 let hz = self.params.hz() * libm::powf(2.0, n as f32 / 12.0);
                 self.params.set_hz(hz.clamp(MIN_HZ, MAX_HZ));
             }
-            InputEvent::Tap { y, .. } => {
-                // Top half of the round screen raises the level, bottom half lowers it.
-                let step = if y < 180 { AMP_STEP } else { -AMP_STEP };
+            InputEvent::Tap { x, y } => {
+                let step = if Self::ZONES[0].hit(x, y) {
+                    AMP_STEP
+                } else if Self::ZONES[1].hit(x, y) {
+                    -AMP_STEP
+                } else {
+                    return;
+                };
                 self.params.set_amp((self.params.amp() + step).clamp(0.0, 1.0));
             }
             InputEvent::Press => {}
@@ -147,6 +158,24 @@ mod tests {
         assert_eq!(p.amp(), 0.0);
         u.input(InputEvent::Tap { x: 180, y: 100 });
         assert!(p.amp() > 0.0 && p.amp() < 1.0);
+    }
+
+    #[test]
+    fn tap_on_the_zone_boundary_goes_to_one_zone() {
+        let (mut u, p) = ui();
+        u.input(InputEvent::Tap { x: 180, y: 179 });
+        assert!((p.amp() - 0.6).abs() < 1e-6, "{}", p.amp());
+        u.input(InputEvent::Tap { x: 180, y: 180 });
+        assert!((p.amp() - 0.5).abs() < 1e-6, "{}", p.amp());
+    }
+
+    #[test]
+    fn tap_outside_the_screen_is_ignored() {
+        let (mut u, p) = ui();
+        u.input(InputEvent::Tap { x: 180, y: -1 });
+        assert_eq!(p.amp(), 0.5, "y<0");
+        u.input(InputEvent::Tap { x: 180, y: 360 });
+        assert_eq!(p.amp(), 0.5, "y>=360");
     }
 
     #[test]
