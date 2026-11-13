@@ -3,6 +3,8 @@
 #![cfg_attr(not(test), no_std)]
 extern crate alloc;
 
+mod scene; // wired up in the SceneUi task
+
 use orbiversum_os::{ParamUi, VoiceApplet};
 
 use alloc::boxed::Box;
