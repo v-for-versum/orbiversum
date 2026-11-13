@@ -45,19 +45,19 @@ impl<V: Voice> Applet for VoiceApplet<V> {
 mod tests {
     use super::*;
 
-    /// Local test voice (the production `Sine` was removed).
-    struct Sine {
+    /// Minimal test-only Voice for VoiceApplet tests.
+    struct TestTone {
         sr: f32,
         hz: f32,
         amp: f32,
         phase: f32,
     }
-    impl Sine {
-        fn new(sr: f32) -> Sine {
-            Sine { sr, hz: 440.0, amp: 0.0, phase: 0.0 }
+    impl TestTone {
+        fn new(sr: f32) -> TestTone {
+            TestTone { sr, hz: 440.0, amp: 0.0, phase: 0.0 }
         }
     }
-    impl Voice for Sine {
+    impl Voice for TestTone {
         fn set_sample_rate(&mut self, sr: f32) {
             self.sr = sr;
         }
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn audio_reflects_params() {
         let p = Arc::new(Params::new(440.0, 0.5));
-        let mut a = VoiceApplet::new("Test", Sine::new(48_000.0), p.clone());
+        let mut a = VoiceApplet::new("Test", TestTone::new(48_000.0), p.clone());
         a.start();
         let loud = peak(&mut a);
         assert!(loud > 0.3, "{loud}");
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn start_syncs_to_current_params_without_step() {
         let p = Arc::new(Params::new(220.0, 0.5));
-        let mut a = VoiceApplet::new("Test", Sine::new(48_000.0), p.clone());
+        let mut a = VoiceApplet::new("Test", TestTone::new(48_000.0), p.clone());
         // Params change before start (another applet was running): first block already uses them.
         p.set_amp(0.25);
         a.start();
