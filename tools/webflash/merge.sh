@@ -3,7 +3,7 @@
 #
 # Берёт готовый ELF и bootloader/partition-table из target/ (после `cargo build --release`
 # в rust/boards/jc3636k718c/firmware), собирает один образ с адреса 0 и обновляет
-# manifest.json: version, image.path, image.size, image.sha256.
+# manifest.json (полная установка) и update.json (KirpisDonis: только приложение).
 #
 #   tools/webflash/merge.sh [версия]      # версия по умолчанию — из Cargo.toml
 #
@@ -32,18 +32,31 @@ espflash save-image --chip esp32s3 --merge --skip-padding \
   --bootloader "$rel/bootloader.bin" --partition-table "$rel/partition-table.bin" \
   "$rel/$bin" "$out"
 
-size="$(wc -c <"$out" | tr -d ' ')"
-sha="$(shasum -a 256 "$out" | cut -d' ' -f1)"
+# KirpisDonis: отдельный образ только приложения (с 0x10000). «Update» пишет его и не трогает
+# загрузчик и таблицу разделов, так что обрыв записи не ломает то, с чего плата стартует.
+app_offset=65536
+app="$root/tools/webflash/firmware/orbiversum-app.bin"
+tail -c +$((app_offset + 1)) "$out" >"$app"
 
-python3 - "$manifest" "$version" "$size" "$sha" <<'PY'
-import json, sys
-path, version, size, sha = sys.argv[1:]
-m = json.load(open(path))
-m["version"] = version
-m["image"] = {"path": "firmware/orbiversum.bin", "size": int(size), "sha256": sha}
-m["builds"][0]["parts"] = [{"path": "firmware/orbiversum.bin", "offset": 0}]
-json.dump(m, open(path, "w"), indent=2, ensure_ascii=False)
-open(path, "a").write("\n")
+python3 - "$root/tools/webflash" "$version" "$app_offset" <<'PY'
+import hashlib, json, os, sys
+d, version, app_offset = sys.argv[1], sys.argv[2], int(sys.argv[3])
+
+def write(manifest, image, offset, name):
+    p = os.path.join(d, image)
+    data = open(p, "rb").read()
+    m = {
+        "name": name,
+        "version": version,
+        "new_install_prompt_erase": False,
+        "image": {"path": image, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()},
+        "builds": [{"chipFamily": "ESP32-S3", "parts": [{"path": image, "offset": offset}]}],
+    }
+    with open(os.path.join(d, manifest), "w") as f:
+        json.dump(m, f, indent=2); f.write("\n")
+    print(f"{manifest}: {image} {len(data)} байт, sha256 {m['image']['sha256']}")
+
+write("manifest.json", "firmware/orbiversum.bin", 0, "Orbiversum")
+write("update.json", "firmware/orbiversum-app.bin", app_offset, "Orbiversum (KirpisDonis update)")
 PY
-
-echo "образ: $out ($size байт, sha256 $sha), версия $version"
+echo "версия $version"

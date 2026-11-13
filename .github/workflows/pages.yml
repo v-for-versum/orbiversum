@@ -61,8 +61,8 @@ jobs:
         run: |
           mkdir -p _site/flash/firmware
           cp site/index.html _site/index.html
-          cp tools/webflash/index.html tools/webflash/manifest.json _site/flash/
-          cp tools/webflash/firmware/orbiversum.bin _site/flash/firmware/
+          cp tools/webflash/index.html tools/webflash/manifest.json tools/webflash/update.json _site/flash/
+          cp tools/webflash/firmware/*.bin _site/flash/firmware/
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -71,7 +71,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: orbiversum-image
-          path: tools/webflash/firmware/orbiversum.bin
+          path: tools/webflash/firmware/*.bin
 
   deploy:
     needs: build
@@ -98,4 +98,6 @@ jobs:
           name: orbiversum-image
       - uses: softprops/action-gh-release@v2
         with:
-          files: orbiversum.bin
+          files: |
+            orbiversum.bin
+            orbiversum-app.bin

@@ -1,0 +1,21 @@
+{
+  "name": "Orbiversum (KirpisDonis update)",
+  "version": "0.1.0",
+  "new_install_prompt_erase": false,
+  "image": {
+    "path": "firmware/orbiversum-app.bin",
+    "size": 1158656,
+    "sha256": "6e0c690d87904267cad20661a4e01773a4e4395cb9d6e2d7bcd13c5fa8a65c5d"
+  },
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "firmware/orbiversum-app.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}

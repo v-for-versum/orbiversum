@@ -7,7 +7,7 @@
 <!--
   Flash page for the Orbiversum firmware. The install button and dialog come from
   esp-web-tools; the manifest next to this page (manifest.json) points at
-  firmware/orbiversum.bin, one merged image written from address 0.
+  firmware/orbiversum.bin (merged image, address 0) and update.json (app only, 0x10000).
   Build the image with tools/webflash/merge.sh. Web Serial needs a secure context:
   serve this folder over https or from localhost (python3 -m http.server 8787).
 -->
@@ -24,6 +24,11 @@
   .panel { background:var(--panel); border-radius:20px; padding:24px; margin:24px 0; }
   .meta { color:var(--muted); font-size:14px; }
   code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em; word-break:break-all; }
+  h2 { font-size:20px; margin:0 0 8px; }
+  ol { margin:8px 0; padding-left:22px; }
+  [hidden] { display:none !important; }
+  esp-web-install-button { display:block; margin:8px 0 20px; }
+  esp-web-install-button button.secondary { background:none; color:var(--accent); border:1px solid var(--accent); }
   esp-web-install-button button { background:var(--accent); color:var(--bg); border:0; border-radius:999px;
          padding:12px 28px; font:inherit; font-weight:600; cursor:pointer; }
 </style>
@@ -33,32 +38,74 @@
   <h1>Orbiversum firmware</h1>
   <p>Flash the Guition JC3636K718C (ESP32-S3) over USB straight from the browser. No toolchain needed.</p>
 
-  <div class="panel">
-    <esp-web-install-button manifest="manifest.json">
-      <span slot="unsupported">This browser has no Web Serial. Use Chrome or Edge on a desktop.</span>
-      <span slot="not-allowed">Web Serial needs https or localhost.</span>
-    </esp-web-install-button>
-    <p class="meta" id="meta">Image: <code>firmware/orbiversum.bin</code>, version <span id="ver">…</span>.</p>
+  <div class="panel" id="kd">
+    <h2>KirpisDonis <span class="meta">anti-brick mode</span></h2>
+    <p class="meta" id="kd-status">Checking the images…</p>
+    <div id="kd-actions" hidden>
+      <p><b>Update</b> — rewrites only the app. The bootloader and the partition table are not touched,
+      so a dropped cable cannot take away what the board boots from. Use this for every routine update.</p>
+      <esp-web-install-button manifest="update.json">
+        <button slot="activate">Update</button>
+        <span slot="unsupported">This browser has no Web Serial. Use Chrome or Edge on a desktop.</span>
+        <span slot="not-allowed">Web Serial needs https or localhost.</span>
+      </esp-web-install-button>
+      <p><b>Install</b> — writes everything from address 0, including the bootloader. Only for a fresh
+      board, a board that does not start, or when the release notes say the partition layout changed.</p>
+      <esp-web-install-button manifest="manifest.json">
+        <button slot="activate" class="secondary">Install</button>
+        <span slot="unsupported">This browser has no Web Serial.</span>
+        <span slot="not-allowed">Web Serial needs https or localhost.</span>
+      </esp-web-install-button>
+    </div>
+    <p class="meta" id="meta">Version <span id="ver">…</span>.</p>
   </div>
 
-  <p class="meta">If the board is not detected, hold BOOT while plugging in USB. Flashing replaces the
-  whole flash contents from address 0, including saved settings.
-  Install button: <a href="https://esphome.github.io/esp-web-tools/">esp-web-tools</a> 10.4.0.</p>
+  <div class="panel">
+    <h2>KirpisDonis recovery</h2>
+    <p>The board cannot be bricked by flashing: the ESP32-S3 download mode lives in ROM. If a write was
+    interrupted and the board is silent or reboots in a loop:</p>
+    <ol>
+      <li>Unplug USB. Hold the <b>BOOT</b> button.</li>
+      <li>Plug USB in while holding BOOT, then release it.</li>
+      <li>Press <b>Install</b> above and pick the new serial port.</li>
+    </ol>
+    <p class="meta">Do not close this tab and do not touch the cable while the dialog shows progress.</p>
+  </div>
+
+  <p class="meta">Flashing is done by <a href="https://esphome.github.io/esp-web-tools/">esp-web-tools</a> 10.4.0.
+  The “Install” button replaces the whole flash contents, including saved settings.</p>
 </main>
 
 <script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
 <script>
-  // Version, size and hash come from the manifest (computed from the file itself):
-  // a server may compress the response, so Content-Length can't be trusted.
+  // KirpisDonis check: before the buttons appear, download both images and compare their
+  // SHA-256 with the manifests. A truncated or stale file never reaches the board.
+  // (Hashes are computed from the file itself: a server may compress the response.)
   (async function () {
-    var ver = document.getElementById('ver'), meta = document.getElementById('meta');
+    var status = document.getElementById('kd-status');
+    var actions = document.getElementById('kd-actions');
+    async function check(manifestUrl) {
+      var m = await fetch(manifestUrl, { cache: 'no-store' }).then(function (r) { return r.json(); });
+      var buf = await fetch(m.image.path, { cache: 'no-store' }).then(function (r) {
+        if (!r.ok) throw new Error(m.image.path + ': HTTP ' + r.status);
+        return r.arrayBuffer();
+      });
+      var hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', buf)))
+        .map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+      if (buf.byteLength !== m.image.size || hash !== m.image.sha256) {
+        throw new Error(m.image.path + ' does not match its manifest');
+      }
+      return m;
+    }
     try {
-      var m = await fetch('manifest.json', { cache: 'no-store' }).then(function (r) { return r.json(); });
-      ver.textContent = m.version;
-      var img = m.image || {};
-      if (img.size) meta.insertAdjacentHTML('beforeend', ' Size: ' + Number(img.size).toLocaleString('en-US') + ' bytes.');
-      if (img.sha256) meta.insertAdjacentHTML('beforeend', ' SHA-256: <code>' + img.sha256 + '</code>.');
-    } catch (e) { ver.textContent = 'unavailable'; }
+      var full = await check('manifest.json');
+      await check('update.json');
+      document.getElementById('ver').textContent = full.version;
+      status.textContent = 'Images verified (SHA-256). Safe to flash.';
+      actions.hidden = false;
+    } catch (e) {
+      status.textContent = 'KirpisDonis stopped the flash: ' + e.message + '. Reload the page; if it persists, the release is broken.';
+    }
   })();
 </script>
 </body>
