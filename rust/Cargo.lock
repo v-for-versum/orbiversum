@@ -1058,8 +1058,6 @@ version = "0.1.0"
 dependencies = [
  "dronecaster-eno",
  "dronecaster-starlids",
- "embedded-graphics",
- "orbiversum-core",
  "orbiversum-os",
 ]
 

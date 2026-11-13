@@ -68,10 +68,10 @@ impl JcAudio {
     }
 }
 
-/// Spawns the audio task. Errors: `AlreadyStarted` on a second call,
-/// `UnsupportedSampleRate` when `sr` is not `SAMPLE_RATE`, `Spawn` when the
-/// thread cannot be created. The task logs its core-1 load every `LOAD_LOG_BLOCKS` blocks.
 impl AudioOut for JcAudio {
+    /// Spawns the audio task. Errors: `AlreadyStarted` on a second call,
+    /// `UnsupportedSampleRate` when `sr` is not `SAMPLE_RATE`, `Spawn` when the
+    /// thread cannot be created. The task logs its core-1 load every `LOAD_LOG_BLOCKS` blocks.
     fn start(&mut self, sr: u32, mut render: RenderFn) -> Result<(), AudioError> {
         if self.started {
             return Err(AudioError::AlreadyStarted);

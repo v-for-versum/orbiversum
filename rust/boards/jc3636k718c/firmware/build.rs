@@ -12,7 +12,7 @@ fn main() {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|| "unknown".into());
     println!("cargo:rustc-env=FW_GIT_DESC={desc}");
-    for p in ["../../../../.git/HEAD", "../../../../.git/index", "src", "../hal"] {
+    for p in ["../../../../.git/HEAD", "../../../../.git/index", "src", "../hal", "../../../sdk", "../../../apps"] {
         println!("cargo:rerun-if-changed={p}");
     }
 }

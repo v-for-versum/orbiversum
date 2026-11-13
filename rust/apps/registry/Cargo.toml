@@ -5,10 +5,8 @@ edition.workspace = true
 
 [dependencies]
 orbiversum-os = { path = "../../sdk/os" }
-orbiversum-core = { path = "../../sdk/core" }
 dronecaster-eno = { path = "../dronecaster/eno" }
 dronecaster-starlids = { path = "../dronecaster/starlids" }
-embedded-graphics = { version = "0.8.2", default-features = false }
 
 [lints]
 workspace = true
