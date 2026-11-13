@@ -1,7 +1,7 @@
 //! JC3636K718C firmware: two applets (Starlids, Eno), a hold-to-open applet
 //! menu, audio on core 1, UI on core 0.
-use board_jc3636k718c::menu::{Menu, Outcome};
-use board_jc3636k718c::JcBoard;
+use orbiversum_board_jc3636k718c::menu::{Menu, Outcome};
+use orbiversum_board_jc3636k718c::JcBoard;
 use esp_idf_svc::sys::{self, esp_err_t, EspError};
 use orbiversum_os::{AppletUi, Board, Canvas, Dirty, Dispatcher, Params, DEFAULT_SAMPLE_RATE};
 use std::sync::Arc;

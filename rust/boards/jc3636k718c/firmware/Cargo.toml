@@ -1,5 +1,5 @@
 [package]
-name = "firmware-jc3636k718c"
+name = "orbiversum-firmware-jc3636k718c"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -11,11 +11,11 @@ publish = false
 [dependencies]
 esp-idf-svc = "0.53"
 log = "0.4"
-board-jc3636k718c = { path = "../crates/board-jc3636k718c" }
-orbiversum-os = { path = "../sdk/os" }
-orbiversum-core = { path = "../sdk/core" }
-orbiversum-apps = { path = "../apps/registry" }
-dronecaster-starlids = { path = "../apps/dronecaster/starlids" }
+orbiversum-board-jc3636k718c = { path = "../hal" }
+orbiversum-os = { path = "../../../sdk/os" }
+orbiversum-core = { path = "../../../sdk/core" }
+orbiversum-apps = { path = "../../../apps/registry" }
+dronecaster-starlids = { path = "../../../apps/dronecaster/starlids" }
 
 [build-dependencies]
 embuild = "0.33"
@@ -23,8 +23,8 @@ embuild = "0.33"
 # The C BSP (and its Component Manager dependencies: LVGL, esp_lvgl_port, ...)
 # is compiled by ESP-IDF's CMake as an extra component.
 [[package.metadata.esp-idf-sys.extra_components]]
-component_dirs = ["../../components/bsp_jc3636k718c"]
+component_dirs = ["../../../../components/bsp_jc3636k718c"]
 
-# Mirrors the host workspace lints in ../Cargo.toml (this crate is its own workspace root).
+# Mirrors the host workspace lints in ../../../Cargo.toml (this crate is its own workspace root).
 [lints.clippy]
 all = { level = "warn", priority = -1 }

@@ -13,6 +13,6 @@ build-std = ["std", "panic_abort"]
 MCU = "esp32s3"
 ESP_IDF_VERSION = "v6.1"
 # Generated baseline for this board (IDF 6.1.0), then the crate's own overrides.
-ESP_IDF_SDKCONFIG_DEFAULTS = "../../sdkconfig.jc3636k718c;sdkconfig.defaults"
+ESP_IDF_SDKCONFIG_DEFAULTS = "../../../../sdkconfig.jc3636k718c;sdkconfig.defaults"
 ESP_IDF_TOOLS_INSTALL_DIR = "global"
 
