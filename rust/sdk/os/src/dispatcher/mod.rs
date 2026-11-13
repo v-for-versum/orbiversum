@@ -51,9 +51,13 @@
 //!
 //! `AudioPath::audio` and the `Applet::audio` it calls: no allocation, no
 //! freeing, no locks, no blocking. The only shared-memory operations are
-//! atomic loads/stores and a refcount bump of the internal `Arc`. Anything
-//! that allocates or frees applet memory belongs in `Applet::start` /
-//! `Applet::stop`, which only run on the UI thread inside `service`.
+//! atomic loads/stores and a refcount increment at the start of each
+//! `AudioPath::audio` call and the matching decrement at its end, on the
+//! internal `Arc`. The decrement would free `Shared` (applets and `Params`) if
+//! it were the last reference, so the `Dispatcher` must outlive the audio
+//! path; the firmware keeps it alive for the whole run. Anything that allocates
+//! or frees applet memory belongs in `Applet::start` / `Applet::stop`, which
+//! only run on the UI thread inside `service`.
 use crate::applet::{Applet, AppletInfo};
 use crate::params::Params;
 use alloc::boxed::Box;
