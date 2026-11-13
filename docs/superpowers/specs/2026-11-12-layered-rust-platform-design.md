@@ -1,3 +1,5 @@
+> Historical document. Paths predate the sdk/apps/boards layout; see README.md.
+
 # Слоёная Rust-платформа с апплетами (Dronecaster как первое применение)
 
 Дата: 2026-11-12

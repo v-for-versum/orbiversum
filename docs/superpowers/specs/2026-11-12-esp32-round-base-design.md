@@ -1,3 +1,5 @@
+> Historical document. Paths predate the sdk/apps/boards layout; see README.md.
+
 # esp32-round-base: каркас под свой синтезатор
 
 Дата: 2026-11-12

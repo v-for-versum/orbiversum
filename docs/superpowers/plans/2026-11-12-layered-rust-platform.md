@@ -1,3 +1,5 @@
+> Historical document. Paths predate the sdk/apps/boards layout; see README.md.
+
 # Слоёная Rust-платформа: первый срез. План реализации
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

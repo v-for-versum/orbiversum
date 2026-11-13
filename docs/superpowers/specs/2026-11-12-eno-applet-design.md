@@ -1,3 +1,5 @@
+> Historical document. Paths predate the sdk/apps/boards layout; see README.md.
+
 # Апплет Eno: порт дрона Eno.scd на Rust
 
 Дата: 2026-11-12. Ветка `scaffold`. Источник: `/Users/noise/code/github/northern-information/dronecaster/engine/drones/Eno.scd`
