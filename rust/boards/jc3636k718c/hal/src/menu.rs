@@ -1,16 +1,16 @@
 //! Two-level applet menu. Hold (`InputEvent::Press`) opens it; the root lists
 //! groups, a group lists its applets. The knob moves the cursor, a tap on the
 //! right part of the screen (or another hold) enters a group or selects an
-//! applet, a tap on the left part goes back one level. The menu paints
+//! applet, a tap on the left part goes back one level; zone glyphs show both. The menu paints
 //! straight into the shared framebuffer, so the caller must `invalidate()`
 //! the applet UI that becomes visible when the menu closes.
 use alloc::vec::Vec;
-use embedded_graphics::mono_font::{ascii::{FONT_10X20, FONT_6X10}, MonoTextStyle};
+use embedded_graphics::mono_font::{ascii::FONT_10X20, MonoTextStyle};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::{Baseline, Text};
-use orbiversum_os::{Canvas, Dirty, InputEvent};
+use orbiversum_os::{Canvas, Dirty, Edge, Glyph, InputEvent, TapZone};
 
 /// Rows shown at once (the list scrolls beyond that).
 pub const VISIBLE: usize = 6;
@@ -19,12 +19,11 @@ const LIST_TOP: i32 = 70;
 const ROW_X: i32 = 70;
 const ROW_W: u32 = 220;
 const TITLE: Rectangle = Rectangle::new(Point::new(ROW_X, 30), Size::new(ROW_W, 30));
-/// Taps with `x` below this go back; at or above it they confirm.
-const BACK_X: i16 = 120;
-
-/// Edge labels: where a tap goes back / confirms.
-const BACK_LABEL: Rectangle = Rectangle::new(Point::new(10, 172), Size::new(54, 10));
-const OK_LABEL: Rectangle = Rectangle::new(Point::new(316, 172), Size::new(30, 10));
+/// Left part of the screen: one level up.
+const BACK: TapZone = TapZone::new(Rectangle::new(Point::new(0, 0), Size::new(120, 360)), Edge::Left, Glyph::Back);
+/// Right part of the screen: enter / select.
+const FORWARD: TapZone =
+    TapZone::new(Rectangle::new(Point::new(120, 0), Size::new(240, 360)), Edge::Right, Glyph::Forward);
 
 /// A named set of applets shown as one root row.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,7 +150,7 @@ impl Menu {
                 self.cursor = (self.cursor as i32 + n).rem_euclid(len.max(1)) as usize;
                 Outcome::Consumed
             }
-            InputEvent::Tap { x, .. } if x < BACK_X => {
+            InputEvent::Tap { x, y } if BACK.hit(x, y) => {
                 if let Some(g) = self.level.take() {
                     self.cursor = g;
                     self.painted = None;
@@ -196,11 +195,10 @@ impl Menu {
                 for slot in 0..shown {
                     self.paint_row(d, slot, off + slot);
                 }
-                let hint = MonoTextStyle::new(&FONT_6X10, Rgb565::new(16, 32, 16));
                 if self.level.is_some() {
-                    let _ = Text::with_baseline("< back", BACK_LABEL.top_left, hint, Baseline::Top).draw(d);
+                    BACK.paint(d);
                 }
-                let _ = Text::with_baseline("ok >", OK_LABEL.top_left, hint, Baseline::Top).draw(d);
+                FORWARD.paint(d);
                 dirty.set_full();
             }
             Some((_, _, po)) if po != off => {
@@ -269,18 +267,28 @@ mod tests {
     }
 
     #[test]
-    fn edge_labels_say_what_the_taps_do() {
+    fn edge_glyphs_show_what_the_taps_do() {
         let mut m = menu();
         m.handle(InputEvent::Press, usize::MAX);
-        assert!(painted_in(&mut m, &OK_LABEL), "root shows the ok label");
+        assert!(painted_in(&mut m, &FORWARD.glyph_rect()), "root shows the forward glyph");
         m.handle(RIGHT, usize::MAX);
-        assert!(painted_in(&mut m, &OK_LABEL), "and inside a group");
+        assert!(painted_in(&mut m, &FORWARD.glyph_rect()), "and inside a group");
         m.handle(LEFT, usize::MAX);
         let mut root = Px(Vec::new());
         m.draw(&mut Canvas(&mut root), &mut Dirty::new());
-        assert!(!root.0.iter().any(|p| BACK_LABEL.contains(*p)), "no back label at the root");
+        assert!(!root.0.iter().any(|p| BACK.glyph_rect().contains(*p)), "no back glyph at the root");
         m.handle(RIGHT, usize::MAX);
-        assert!(painted_in(&mut m, &BACK_LABEL), "inside a group the back label is shown");
+        assert!(painted_in(&mut m, &BACK.glyph_rect()), "inside a group the back glyph is shown");
+    }
+
+    #[test]
+    fn left_tap_at_the_root_changes_nothing() {
+        let mut m = menu();
+        m.handle(InputEvent::Press, usize::MAX);
+        m.handle(InputEvent::Knob(1), usize::MAX);
+        assert_eq!(m.handle(LEFT, usize::MAX), Outcome::Consumed);
+        assert_eq!(m.level(), None);
+        assert_eq!(m.cursor(), 1);
     }
 
     const LEFT: InputEvent = InputEvent::Tap { x: 119, y: 0 };
