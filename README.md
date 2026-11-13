@@ -21,12 +21,15 @@ rust/
                                  (its own cargo workspace, esp toolchain)
   tools/render-wav/              render-wav: host renderer, voice -> WAV
 components/bsp_jc3636k718c/      C board support package (I2S, display, touch) used by the firmware
+main/, CMakeLists.txt,           minimal C/ESP-IDF bring-up app: inits the BSP and idles
+partitions.csv
+LICENSE, THIRD-PARTY.md          licence and third-party notices
 docs/audio.md                    audio guide: signal path, real-time rules, CPU budget
 docs/superpowers/                design specs and plans (history)
 ```
 
 Dependencies only point downward: apps -> `sdk/core`; `sdk/os` -> `sdk/core`; registry -> apps and
-`sdk/os`; hal -> `sdk/os`; firmware -> hal and registry. Hardware-agnostic abstractions (`Board`,
+`sdk/os`; hal -> `sdk/os`; firmware -> hal, registry, `sdk/os`, `sdk/core` and `dronecaster-starlids`. Hardware-agnostic abstractions (`Board`,
 `AudioOut`, `Display`) live in `sdk/os`; everything specific to one board lives under
 `boards/<name>/`. Details of the Rust workspace: [rust/README.md](rust/README.md).
 
@@ -46,15 +49,19 @@ cd rust && cargo run --release -p render-wav -- --drone eno --seconds 30 --out e
 ```
 
 Build the firmware. It needs the `esp` Rust toolchain and the Xtensa/ESP-IDF environment loaded
-into the shell (the file below is the one used on the author's machine; it sets `LIBCLANG_PATH`
-and `PATH`, use your own equivalent). The toolchain is selected by
+into the shell (`$HOME/export-esp.sh` below stands for your own script, the one `espup` generates;
+it sets `LIBCLANG_PATH` and `PATH`). The toolchain is selected by
 `rust/boards/jc3636k718c/firmware/rust-toolchain.toml` (`channel = "esp"`), the target is
 `xtensa-esp32s3-espidf`, and ESP-IDF v6.1 is fetched by the build
 (`rust/boards/jc3636k718c/firmware/.cargo/config.toml`):
 
 ```sh
-cd rust/boards/jc3636k718c/firmware && . /Users/noise/export-esp.sh && cargo build --release
+cd rust/boards/jc3636k718c/firmware && . "$HOME/export-esp.sh" && cargo build --release
 ```
+
+The firmware build reads the board baseline `sdkconfig.jc3636k718c` from the repository root
+(`ESP_IDF_SDKCONFIG_DEFAULTS` in the firmware's `.cargo/config.toml`). That file is not tracked in
+git yet, so a fresh clone must supply it before the build works.
 
 Flashing uses `espflash flash --monitor` (the cargo runner in the same config file).
 

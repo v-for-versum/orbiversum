@@ -27,8 +27,8 @@ tested on the host; `audio`, `jc` and `ffi` are compiled only for `target_os = "
 `boards/jc3636k718c/firmware` (package `orbiversum-firmware-jc3636k718c`) is listed under
 `exclude` in `Cargo.toml` and is its own workspace root. It builds with the `esp` toolchain
 (`firmware/rust-toolchain.toml`) for `xtensa-esp32s3-espidf`, with `build-std`, and pulls in
-ESP-IDF and the C board support package (`../../components/bsp_jc3636k718c` at the repository
-root) and `sdkconfig.jc3636k718c` through paths in `firmware/Cargo.toml` and
+ESP-IDF and the C board support package (`../../../../components/bsp_jc3636k718c` at the
+repository root) and `sdkconfig.jc3636k718c` through paths in `firmware/Cargo.toml` and
 `firmware/.cargo/config.toml`. None of this is available to a host `cargo test --workspace`, and
 the host toolchain cannot build for the target, so the two must not share a workspace. Build
 command: [../README.md](../README.md), "Quick start". The firmware has its own `Cargo.lock`.
