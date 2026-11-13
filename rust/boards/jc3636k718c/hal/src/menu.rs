@@ -5,7 +5,7 @@
 //! straight into the shared framebuffer, so the caller must `invalidate()`
 //! the applet UI that becomes visible when the menu closes.
 use alloc::vec::Vec;
-use embedded_graphics::mono_font::{ascii::FONT_10X20, MonoTextStyle};
+use embedded_graphics::mono_font::{ascii::{FONT_10X20, FONT_6X10}, MonoTextStyle};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
@@ -21,6 +21,10 @@ const ROW_W: u32 = 220;
 const TITLE: Rectangle = Rectangle::new(Point::new(ROW_X, 30), Size::new(ROW_W, 30));
 /// Taps with `x` below this go back; at or above it they confirm.
 const BACK_X: i16 = 120;
+
+/// Edge labels: where a tap goes back / confirms.
+const BACK_LABEL: Rectangle = Rectangle::new(Point::new(10, 172), Size::new(54, 10));
+const OK_LABEL: Rectangle = Rectangle::new(Point::new(316, 172), Size::new(30, 10));
 
 /// A named set of applets shown as one root row.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -192,6 +196,11 @@ impl Menu {
                 for slot in 0..shown {
                     self.paint_row(d, slot, off + slot);
                 }
+                let hint = MonoTextStyle::new(&FONT_6X10, Rgb565::new(16, 32, 16));
+                if self.level.is_some() {
+                    let _ = Text::with_baseline("< back", BACK_LABEL.top_left, hint, Baseline::Top).draw(d);
+                }
+                let _ = Text::with_baseline("ok >", OK_LABEL.top_left, hint, Baseline::Top).draw(d);
                 dirty.set_full();
             }
             Some((_, _, po)) if po != off => {
@@ -235,6 +244,43 @@ mod tests {
             c.for_each(drop);
         }
         fn fill_solid(&mut self, _: &Rectangle, _: Rgb565) {}
+    }
+
+    /// Collects the points of every drawn pixel (text goes through `draw_pixels`).
+    struct Px(Vec<Point>);
+    impl Surface for Px {
+        fn size(&self) -> Size {
+            Size::new(360, 360)
+        }
+        fn draw_pixels(&mut self, p: &mut dyn Iterator<Item = Pixel<Rgb565>>) {
+            self.0.extend(p.map(|Pixel(pt, _)| pt));
+        }
+        fn fill_contiguous(&mut self, _: &Rectangle, c: &mut dyn Iterator<Item = Rgb565>) {
+            c.for_each(drop);
+        }
+        fn fill_solid(&mut self, _: &Rectangle, _: Rgb565) {}
+    }
+
+    fn painted_in(m: &mut Menu, area: &Rectangle) -> bool {
+        let mut s = Px(Vec::new());
+        let mut d = Dirty::new();
+        m.draw(&mut Canvas(&mut s), &mut d);
+        s.0.iter().any(|p| area.contains(*p))
+    }
+
+    #[test]
+    fn edge_labels_say_what_the_taps_do() {
+        let mut m = menu();
+        m.handle(InputEvent::Press, usize::MAX);
+        assert!(painted_in(&mut m, &OK_LABEL), "root shows the ok label");
+        m.handle(RIGHT, usize::MAX);
+        assert!(painted_in(&mut m, &OK_LABEL), "and inside a group");
+        m.handle(LEFT, usize::MAX);
+        let mut root = Px(Vec::new());
+        m.draw(&mut Canvas(&mut root), &mut Dirty::new());
+        assert!(!root.0.iter().any(|p| BACK_LABEL.contains(*p)), "no back label at the root");
+        m.handle(RIGHT, usize::MAX);
+        assert!(painted_in(&mut m, &BACK_LABEL), "inside a group the back label is shown");
     }
 
     const LEFT: InputEvent = InputEvent::Tap { x: 119, y: 0 };

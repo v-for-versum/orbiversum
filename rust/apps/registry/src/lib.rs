@@ -21,8 +21,12 @@ use scene::Scene;
 
 /// Where the hz/amp line is drawn (10x20 font), right under the scene.
 const TEXT_ROW: Rectangle = Rectangle::new(Point::new(60, 198), Size::new(240, 26));
-/// The static "press long to exit" hint, painted with the full repaint.
-const HINT_ROW: Rectangle = Rectangle::new(Point::new(90, 240), Size::new(180, 14));
+/// Static hints, painted with the full repaint: what the knob does, how to
+/// leave, and what a tap on the top / bottom half does (see `ParamUi::input`).
+const KNOB_ROW: Rectangle = Rectangle::new(Point::new(90, 230), Size::new(180, 12));
+const HINT_ROW: Rectangle = Rectangle::new(Point::new(90, 244), Size::new(180, 12));
+const TOP_ROW: Rectangle = Rectangle::new(Point::new(110, 22), Size::new(140, 12));
+const BOTTOM_ROW: Rectangle = Rectangle::new(Point::new(110, 326), Size::new(140, 12));
 
 /// UI half of a dronecaster voice: the animated `classic` scene with an
 /// hz/amp line under it. Input is handled like [`ParamUi`] (knob = semitones,
@@ -51,11 +55,18 @@ impl SceneUi {
         let _ = Text::with_text_style(&s, at, style, ts).draw(&mut row);
     }
 
-    fn paint_hint(d: &mut Canvas<'_>) {
+    fn paint_hints(d: &mut Canvas<'_>) {
         let style = MonoTextStyle::new(&FONT_6X10, Rgb565::new(16, 32, 16));
         let ts = TextStyleBuilder::new().alignment(Alignment::Center).baseline(Baseline::Top).build();
-        let at = HINT_ROW.top_left + Point::new(HINT_ROW.size.width as i32 / 2, 2);
-        let _ = Text::with_text_style("press long to exit", at, style, ts).draw(d);
+        for (row, s) in [
+            (TOP_ROW, "^ tap: amp +"),
+            (KNOB_ROW, "knob: hz"),
+            (HINT_ROW, "press long to exit"),
+            (BOTTOM_ROW, "v tap: amp -"),
+        ] {
+            let at = row.top_left + Point::new(row.size.width as i32 / 2, 1);
+            let _ = Text::with_text_style(s, at, style, ts).draw(d);
+        }
     }
 }
 
@@ -79,7 +90,7 @@ impl AppletUi for SceneUi {
                 let _ = d.clear(Rgb565::BLACK);
                 self.scene.draw_all(d);
                 self.paint_text(d);
-                Self::paint_hint(d);
+                Self::paint_hints(d);
                 dirty.set_full();
                 self.scene.reset();
             }
@@ -220,6 +231,9 @@ mod tests {
         assert!(s.px.iter().any(|p| HINT_ROW.contains(*p)), "hint text drawn in HINT_ROW");
         assert!(s.px.iter().any(|p| TEXT_ROW.contains(*p)), "values drawn in TEXT_ROW");
         assert!(TEXT_ROW.size.height >= 20, "values use the 10x20 font");
+        for (name, row) in [("top tap label", TOP_ROW), ("bottom tap label", BOTTOM_ROW), ("knob label", KNOB_ROW)] {
+            assert!(s.px.iter().any(|p| row.contains(*p)), "{name} drawn");
+        }
     }
 
     #[test]
