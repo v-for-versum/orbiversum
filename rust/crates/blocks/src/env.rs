@@ -64,7 +64,14 @@ impl EnvPerc {
         }
         self.t += dt;
         if self.t < self.attack_s {
-            return self.level * self.t * self.inv_attack;
+            // SC Env.perc applies `curve` to both segments: 0 -> level with the same shape.
+            let u = self.t * self.inv_attack;
+            let shape = if self.inv_den != 0.0 {
+                (1.0 - fast::exp(self.curve * u)) * self.inv_den
+            } else {
+                u
+            };
+            return self.level * shape;
         }
         let u = (self.t - self.attack_s) * self.inv_release;
         if u >= 1.0 {
@@ -124,6 +131,9 @@ mod tests {
             }
             v
         };
+        let v = at(&mut e, 0.005);
+        // curve -4 attack is concave: at half the attack time it is already past 0.8 of the level
+        assert!(v > 0.8 && v < 0.9, "{v}");
         let v = at(&mut e, 0.01);
         assert!((v - 1.0).abs() < 0.02, "{v}");
         let v = at(&mut e, 1.01);

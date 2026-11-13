@@ -1,12 +1,12 @@
-//! Lightweight Freeverb (as SC FreeVerb): per channel 3 lowpass-feedback combs
-//! in parallel, then 1 allpass in series. Channels are independent.
+//! Lightweight Freeverb (as SC FreeVerb): per channel 4 lowpass-feedback combs
+//! in parallel, then 2 allpasses in series. Channels are independent.
 //! Buffers have exact lengths and indices wrap by compare (no modulo, no division in `tick`).
 
 use alloc::vec;
 use alloc::vec::Vec;
 
-const COMB_LEN: [usize; 3] = [1116, 1277, 1422];
-const AP_LEN: [usize; 1] = [556];
+const COMB_LEN: [usize; 4] = [1116, 1277, 1422, 1557];
+const AP_LEN: [usize; 2] = [556, 341];
 const FIXED_GAIN: f32 = 0.015;
 const AP_FB: f32 = 0.5;
 
@@ -62,8 +62,8 @@ impl Allpass {
 }
 
 struct Channel {
-    combs: [Comb; 3],
-    aps: [Allpass; 1],
+    combs: [Comb; 4],
+    aps: [Allpass; 2],
 }
 
 impl Channel {
@@ -73,8 +73,9 @@ impl Channel {
                 Comb::new(scaled(COMB_LEN[0], sr)),
                 Comb::new(scaled(COMB_LEN[1], sr)),
                 Comb::new(scaled(COMB_LEN[2], sr)),
+                Comb::new(scaled(COMB_LEN[3], sr)),
             ],
-            aps: [Allpass::new(scaled(AP_LEN[0], sr))],
+            aps: [Allpass::new(scaled(AP_LEN[0], sr)), Allpass::new(scaled(AP_LEN[1], sr))],
         }
     }
 
@@ -123,13 +124,6 @@ impl ReverbLite {
     /// Total bytes of delay memory.
     pub fn mem_bytes(&self) -> usize {
         self.ch[0].mem_bytes() + self.ch[1].mem_bytes()
-    }
-
-    /// Mono path: runs only channel 0's lines and returns the wet contribution (`wet * mix`),
-    /// so the caller adds its own dry signal. Do not mix with `tick` on the same instance.
-    #[inline(always)]
-    pub fn tick_mono_wet(&mut self, x: f32) -> f32 {
-        self.ch[0].tick(x, self.fb, self.d1, self.d2) * self.mix
     }
 
     #[inline(always)]
@@ -185,17 +179,6 @@ mod tests {
         assert!(e[2] < 1e-3 * e[0], "{e:?}");
         let f = first.unwrap();
         assert!((f as i64 - 1214).abs() <= 2, "first echo at {f}");
-    }
-
-    #[test]
-    fn reverb_mono_matches_channel0_wet() {
-        let mut a = ReverbLite::new(SR, 0.45, 2.0, 0.5);
-        let mut b = ReverbLite::new(SR, 0.45, 2.0, 0.5);
-        for i in 0..20000 {
-            let x = libm::sinf(i as f32 * 0.05);
-            let full = a.tick(x, 0.0)[0] - x * 0.55;
-            assert!((full - b.tick_mono_wet(x)).abs() < 1e-6, "i={i}");
-        }
     }
 
     #[test]

@@ -38,9 +38,10 @@ const CTRL: usize = 32;
 /// Output trim: the layers peak at ~1.56 at amp 1, which the i16 conversion would hard-clip.
 const OUT_TRIM: f32 = 0.6;
 /// Sacrifice switches for the CPU budget (flipped by hand after a measurement).
-/// Reverb on the mono sum (one channel's lines) with the same wet on both channels.
-const REVERB_SINGLE_CHANNEL: bool = true;
-const KLANK_ENABLED: bool = false;
+/// Reverb on the mono sum with the same wet on both channels. Note: the current
+/// `ReverbLite` has no mono tick, so this saves no CPU until it gets one.
+const REVERB_SINGLE_CHANNEL: bool = false;
+const KLANK_ENABLED: bool = true;
 const REVERB_MIX: f32 = 0.45;
 const KLANK_DECAY: f32 = 1.0;
 const KLANK_EXCITE: f32 = 0.004;
@@ -565,9 +566,10 @@ impl Voice for Eno {
             pb.mark(P_FINAL);
             for (j, o) in out[i..i + n].iter_mut().enumerate() {
                 if REVERB_SINGLE_CHANNEL {
-                    let wet = self.reverb.tick_mono_wet((l[j] + r[j]) * 0.5);
-                    let d = 1.0 - REVERB_MIX;
-                    *o = [(l[j] * d + wet) * amp, (r[j] * d + wet) * amp];
+                    let m = (l[j] + r[j]) * 0.5;
+                    let dry = m * (1.0 - REVERB_MIX);
+                    let wet = self.reverb.tick(m, m)[0] - dry;
+                    *o = [(l[j] * (1.0 - REVERB_MIX) + wet) * amp, (r[j] * (1.0 - REVERB_MIX) + wet) * amp];
                 } else {
                     let y = self.reverb.tick(l[j], r[j]);
                     *o = [y[0] * amp, y[1] * amp];
