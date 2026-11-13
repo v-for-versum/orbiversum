@@ -165,12 +165,12 @@ LodePNG, Tiny TTF, GIF, barcode, LZ4, frogfs (все — `is not set` в `sdkcon
   `docs/signal-chain/gen_html.py` (строка 33). Библиотека нужна для отрисовки Mermaid-схемы
   сигнального тракта в браузере. **В прошивку она не входит.**
 - **esp-web-tools 10.4.0**, лицензия Apache-2.0. Не хранится в репозитории: страница
-  `tools/webflash/index.html` (строка 229) подключает её с `unpkg.com`. Нужна для записи
+  `tools/webflash/index.html` подключает её с `unpkg.com`. Нужна для записи
   прошивки из браузера, в прошивку не входит.
 - **GitHub Actions** (`actions/checkout`, `actions/cache`, `actions/upload-artifact`, все v4,
   лицензия MIT) — `.github/workflows/build.yml`. Только сборка, в выпуск не входит.
 - `docs/lfo-shapes.png` — схема формы LFO; сторонних материалов в ней нет.
-- `tools/webflash/firmware/OBOD.bin` — собранный образ прибора, не сторонний файл.
+- `tools/webflash/firmware/orbiversum.bin` — собранный образ прошивки, не сторонний файл.
 
 ## Как восстанавливаются зависимости
 

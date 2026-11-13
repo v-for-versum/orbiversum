@@ -1,137 +1,23 @@
-# webflash — прошивка OBOD из браузера
+# webflash — flash Orbiversum from the browser
 
-Запись прибора по USB через Web Serial: страница с кнопкой, манифест и единый
-образ прошивки. Ничего собирать здесь не нужно — берётся готовая сборка ESP-IDF
-из `build/`.
+A page with an install button (esp-web-tools), a manifest and one merged firmware image.
 
-| Файл | Что это |
+| File | What it is |
 | --- | --- |
-| `merge.ps1` | склеивает `build/flash_args` в один образ `firmware/OBOD.bin` |
-| `firmware/OBOD.bin` | объединённый образ: загрузчик, таблица разделов, данные OTA и приложение |
-| `manifest.json` | описание прошивки для esp-web-tools: имя, версия, чип, части |
-| `changelog.json` | история изменений: все версии из `CHANGELOG.md`, от новой к старой |
-| `index.html` | страница с кнопкой установки |
-| `serve.ps1` | локальный сервер для страницы (`http://localhost:8787/`) |
+| `merge.sh` | merges the Rust build into `firmware/orbiversum.bin` and updates the manifest |
+| `firmware/orbiversum.bin` | merged image: bootloader, partition table, app; written from address 0 |
+| `manifest.json` | esp-web-tools manifest: name, version, chip, image size and SHA-256 |
+| `index.html` | the page with the install button |
 
-## Порядок работы
+## Workflow
 
-После каждой сборки прошивки:
-
-```powershell
-pwsh -File tools/webflash/merge.ps1
+```sh
+cd rust/boards/jc3636k718c/firmware && cargo build --release
+cd ../../../.. && tools/webflash/merge.sh          # or: merge.sh 0.2.0
+python3 -m http.server 8787 --directory tools/webflash   # http://localhost:8787/
 ```
 
-Скрипт читает `build/flash_args`, поэтому адреса и имена частей всегда те же,
-что у `idf.py flash`. Он же обновляет `manifest.json`: поле `version` (по
-умолчанию дата и время сборки приложения, ключ `-Version 1.2.1` ставит номер
-выпуска) и поля `image.path`, `image.size`, `image.sha256` — путь, размер и хеш
-собранного образа. `-SkipManifest` оставляет манифест как есть и не трогает
-`changelog.json`.
-
-Размер и хеш лежат в манифесте потому, что странице нельзя доверять заголовку
-`Content-Length`: на GitHub Pages образ отдаётся сжатым, и заголовок описывает
-поток, а не файл. Страница показывала из него 701 697 байт вместо 1 176 144.
-Числа в манифесте считаются по самому файлу, поэтому совпадают с тем, что
-скачивается. Сверяет их `tools/image-meta-check.js` — манифест, страницы
-записи, `web/under.html`, `docs/RELEASE.md` и `FEATURES.md` против файла
-`firmware/OBOD.bin`.
-
-Заодно пересобирается `changelog.json` — вся история из `CHANGELOG.md`, по всем
-выпускам. Показывает её страница истории на сайте, один раз и в одном месте; на
-странице установки и на странице прошивки в документации от списка осталась
-ссылка на неё, с якорем последнего выпуска. Разметка в файл не переносится:
-страница знает только номер версии, подзаголовки разделов и пункты списка, а
-переносы строк внутри пункта склеиваются. Если правился `CHANGELOG.md`, а
-`merge.ps1` не запускался, `tools/changelog-check.js` это поймает.
-
-Для выпуска образ склеивается с номером версии:
-
-```powershell
-pwsh -File tools/webflash/merge.ps1 -Version 1.2.1
-```
-
-В `manifest.json` стоит `new_install_prompt_erase: false` — страница не
-предлагает стереть прибор целиком. На сохранность настроек это не влияет: образ
-пишется одним куском от 0x0, а `esptool` перед записью стирает секторы по всему
-его диапазону, включая область NVS. Полное стирание при необходимости делается
-отдельно: `esptool erase-flash`.
-
-Затем поднимите страницу:
-
-```powershell
-pwsh -File tools/webflash/serve.ps1
-```
-
-и откройте в Chrome или Edge на компьютере:
-
-```
-http://localhost:8787/
-```
-
-Сервер слушает только петлевой интерфейс, отдаёт каталог `tools/webflash` и
-печатает адрес страницы, манифеста и образа. Останавливается по Ctrl+C.
-Другой порт: `-Port 8080`.
-
-## Копия на сайте
-
-Раздел [annabiosis.github.io/obod](https://annabiosis.github.io/obod/) — та же
-промо-страница, только образ, манифест и список изменений лежат рядом с ней. Из страниц
-документации она получается заменой пяти путей:
-
-| В проекте | На сайте |
-| --- | --- |
-| `manifest="tools/webflash/manifest.json"` | `manifest="manifest.json"` |
-| `tools/webflash/firmware/OBOD.bin` | `firmware/OBOD.bin` |
-| `tools/webflash/changelog.json` | `changelog.json` |
-| `src="docs/signal-chain/vendor/mermaid.min.js"` | `src="vendor/mermaid.min.js"` |
-| `href="docs/signal-chain/obod-signal-chain.html"` | `href="diagram.html"` |
-
-Кроме этого у копии нет ссылок на `docs/RELEASE.md` и `docs/RELEASE-NOTES.md`
-(репозиторий закрытый, посетителю они не откроются) и добавлен `sw.js` с охватом
-`./`. Править страницу между маркерами `signal diagram` бессмысленно: этот блок
-пишет `docs/signal-chain/gen_html.py`.
-
-При обновлении прошивки на сайте меняются только `manifest.json`,
-`firmware/OBOD.bin` и `changelog.json`. После правки промо страницу нужно пересобрать и
-положить рядом с ней `diagram.html` и `vendor/mermaid.min.js`.
-
-## Что записывается
-
-Адреса и файлы — из `build/flash_args` (проверяются при каждом запуске
-`merge.ps1`):
-
-| Адрес | Файл |
-| --- | --- |
-| 0x0 | `bootloader/bootloader.bin` |
-| 0x8000 | `partition_table/partition-table.bin` |
-| 0xf000 | `ota_data_initial.bin` |
-| 0x20000 | `guition_knob.bin` |
-
-Режим flash: `dio`, частота `80m`, размер `16MB` — те же значения, что передаёт
-`idf.py flash`. Образ записывается с адреса 0, поэтому в манифесте одна часть:
-`firmware/OBOD.bin`, `offset: 0`.
-
-## Что нужно знать
-
-* Chrome или Edge на компьютере. Firefox и браузеры на телефонах Web Serial не
-  поддерживают, кнопки установки там не будет.
-* Страница должна открываться по защищённому адресу — `http://localhost:8787/`
-  или по `https`. Из `file://` и с обычного http браузер порт не отдаст.
-* COM-порт выбирается вручную в диалоге браузера. У платы два USB-разъёма;
-  начинать стоит с того, который система видит как CH340.
-* Если на приборе включён приём нот (MIDI IN), COM-порта не будет: USB-разъём отдан
-  MIDI-интерфейсу. Выключите приём нот на странице OPTIONS и перезагрузите прибор —
-  после этого порт снова отладочный.
-* Порт не должен быть занят: `idf.py monitor`, serial-монитор и прочие программы
-  с открытым COM-портом мешают браузеру.
-* Пресеты и настройки при перепрошивке теряются: объединённый образ пишется
-  подряд от 0x0 и закрывает область NVS (`0x9000`–`0xf000`). Прибор включается
-  с заводскими значениями. Полное стирание дополнительно очищает раздел
-  `storage`, его содержимое заливается заново через `tools/upload_fs.ps1`.
-
-## Зависимости
-
-Кнопку и диалог записи рисует компонент `esp-web-install-button` из
-[esp-web-tools](https://esphome.github.io/esp-web-tools/), он подключается с
-unpkg (`esp-web-tools@10.4.0`). Локальных копий нет: при первом открытии
-страницы нужна сеть. Сам сервер из интернета ничего не берёт.
+`merge.sh` needs `espflash` and does not build anything itself. Flash mode, frequency and size
+(dio, 80 MHz, 16 MB) match `sdkconfig.jc3636k718c`; other values leave the board not booting.
+Web Serial works only over https or on localhost (Chrome/Edge), so the page can be published
+as-is on GitHub Pages together with `manifest.json` and `firmware/`.

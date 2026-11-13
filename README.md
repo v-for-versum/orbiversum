@@ -144,7 +144,7 @@ rust/
 components/bsp_jc3636k718c/      C board support package (I2S, display, touch) used by the firmware
 main/, CMakeLists.txt,           minimal C/ESP-IDF bring-up app: inits the BSP and idles
 partitions.csv
-tools/, web/                     helper scripts and a browser flasher inherited from the C app
+tools/                           helper scripts; tools/webflash is the browser flasher (see its README)
 LICENSE, THIRD-PARTY.md          licence and third-party notices
 docs/audio.md                    audio guide: signal path, real-time rules, CPU budget
 docs/superpowers/                design specs and plans (history)

@@ -4,3 +4,7 @@ sdkconfig.old
 managed_components/
 __pycache__/
 .superpowers/
+.pio/
+
+# Built firmware image (made by tools/webflash/merge.sh)
+tools/webflash/firmware/

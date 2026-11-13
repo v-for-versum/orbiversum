@@ -1,18 +1,18 @@
 {
-  "name": "esp32-round-base",
+  "name": "Orbiversum",
   "version": "0.1.0",
   "new_install_prompt_erase": false,
   "image": {
-    "path": "firmware/esp32-round-base.bin",
-    "size": 0,
-    "sha256": ""
+    "path": "firmware/orbiversum.bin",
+    "size": 1224192,
+    "sha256": "a086b789aa2f8105f9c360d7c5b71d15987cd9e0011f6bb15fc87ef5be1d0c6e"
   },
   "builds": [
     {
       "chipFamily": "ESP32-S3",
       "parts": [
         {
-          "path": "firmware/esp32-round-base.bin",
+          "path": "firmware/orbiversum.bin",
           "offset": 0
         }
       ]
