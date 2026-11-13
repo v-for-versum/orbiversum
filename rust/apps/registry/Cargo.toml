@@ -1,14 +1,14 @@
 [package]
-name = "applets"
+name = "orbiversum-apps"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
 orbiversum-os = { path = "../../sdk/os" }
-dsp = { path = "../dsp" }
 orbiversum-core = { path = "../../sdk/core" }
+dronecaster-eno = { path = "../dronecaster/eno" }
+dronecaster-starlids = { path = "../dronecaster/starlids" }
 embedded-graphics = { version = "0.8.2", default-features = false }
-libm = "0.2"
 
 [lints]
 workspace = true

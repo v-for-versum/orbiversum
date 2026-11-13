@@ -1,4 +1,4 @@
-use dsp::starlids::Starlids;
+use dronecaster_starlids::Starlids;
 use orbiversum_core::voice::Voice;
 
 const SR: f32 = 48_000.0;

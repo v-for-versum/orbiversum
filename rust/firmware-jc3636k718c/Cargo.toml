@@ -14,8 +14,8 @@ log = "0.4"
 board-jc3636k718c = { path = "../crates/board-jc3636k718c" }
 orbiversum-os = { path = "../sdk/os" }
 orbiversum-core = { path = "../sdk/core" }
-applets = { path = "../crates/applets" }
-dsp = { path = "../crates/dsp" }
+orbiversum-apps = { path = "../apps/registry" }
+dronecaster-starlids = { path = "../apps/dronecaster/starlids" }
 
 [build-dependencies]
 embuild = "0.33"

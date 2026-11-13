@@ -1,11 +1,10 @@
 [package]
-name = "dsp"
+name = "dronecaster-eno"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-orbiversum-core = { path = "../../sdk/core" }
-libm = "0.2"
+orbiversum-core = { path = "../../../sdk/core" }
 
 [lints]
 workspace = true

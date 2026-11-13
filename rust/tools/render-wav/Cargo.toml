@@ -4,7 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-dsp = { path = "../../crates/dsp" }
+dronecaster-eno = { path = "../../apps/dronecaster/eno" }
+dronecaster-starlids = { path = "../../apps/dronecaster/starlids" }
 orbiversum-core = { path = "../../sdk/core" }
 hound = "3.5"
 

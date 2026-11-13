@@ -2,7 +2,7 @@
 //! pre-optimisation implementation (libm tanh, full-rate Moog), seeds 5 and 9,
 //! 110 Hz, amp 0.8, 4 s at 48 kHz.
 
-use dsp::starlids::Starlids;
+use dronecaster_starlids::Starlids;
 use orbiversum_core::voice::Voice;
 
 const SR: f32 = 48_000.0;

@@ -1,4 +1,4 @@
-use dsp::eno::Eno;
+use dronecaster_eno::Eno;
 use orbiversum_core::voice::Voice;
 
 const SR: f32 = 48_000.0;

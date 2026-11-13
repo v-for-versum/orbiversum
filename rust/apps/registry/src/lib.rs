@@ -8,7 +8,8 @@ use orbiversum_os::{ParamUi, VoiceApplet};
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use dsp::{eno::Eno, starlids::Starlids};
+use dronecaster_eno::Eno;
+use dronecaster_starlids::Starlids;
 use orbiversum_os::{Applet, AppletUi, Params};
 
 /// Starlids and Eno as (audio half, UI half) pairs sharing `params`.

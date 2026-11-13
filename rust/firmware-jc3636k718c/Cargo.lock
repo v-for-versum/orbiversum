@@ -36,17 +36,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "applets"
-version = "0.1.0"
-dependencies = [
- "dsp",
- "embedded-graphics",
- "libm",
- "orbiversum-core",
- "orbiversum-os",
-]
-
-[[package]]
 name = "as-slice"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -383,10 +372,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "dsp"
+name = "dronecaster-eno"
 version = "0.1.0"
 dependencies = [
- "libm",
+ "orbiversum-core",
+]
+
+[[package]]
+name = "dronecaster-starlids"
+version = "0.1.0"
+dependencies = [
  "orbiversum-core",
 ]
 
@@ -675,12 +670,12 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 name = "firmware-jc3636k718c"
 version = "0.1.0"
 dependencies = [
- "applets",
  "board-jc3636k718c",
- "dsp",
+ "dronecaster-starlids",
  "embuild",
  "esp-idf-svc",
  "log",
+ "orbiversum-apps",
  "orbiversum-core",
  "orbiversum-os",
 ]
@@ -1074,6 +1069,17 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "orbiversum-apps"
+version = "0.1.0"
+dependencies = [
+ "dronecaster-eno",
+ "dronecaster-starlids",
+ "embedded-graphics",
+ "orbiversum-core",
+ "orbiversum-os",
+]
 
 [[package]]
 name = "orbiversum-core"

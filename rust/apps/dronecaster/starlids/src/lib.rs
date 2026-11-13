@@ -4,6 +4,9 @@
 //! `CTRL` samples at fixed absolute positions, so the output does not
 //! depend on the caller's block size.
 
+#![no_std]
+extern crate alloc;
+
 use orbiversum_core::prof;
 use orbiversum_core::voice::Voice;
 use alloc::vec::Vec;

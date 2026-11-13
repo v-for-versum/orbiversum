@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["sdk/core", "sdk/os", "crates/dsp", "crates/board-jc3636k718c", "crates/applets", "tools/render-wav"]
-default-members = ["sdk/core", "sdk/os", "crates/dsp", "crates/board-jc3636k718c", "crates/applets", "tools/render-wav"]
+members = ["sdk/core", "sdk/os", "crates/board-jc3636k718c", "apps/dronecaster/eno", "apps/dronecaster/starlids", "apps/registry", "tools/render-wav"]
+default-members = ["sdk/core", "sdk/os", "crates/board-jc3636k718c", "apps/dronecaster/eno", "apps/dronecaster/starlids", "apps/registry", "tools/render-wav"]
 
 exclude = ["firmware-jc3636k718c"]
 

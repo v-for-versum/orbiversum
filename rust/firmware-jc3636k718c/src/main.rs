@@ -51,7 +51,7 @@ fn main() {
     let params = Arc::new(Params::default());
     let seed = now_us() as u64;
     let (audio_halves, mut uis): (Vec<_>, Vec<Box<dyn AppletUi>>) =
-        applets::all(seed, DEFAULT_SAMPLE_RATE as f32, params.clone()).into_iter().unzip();
+        orbiversum_apps::all(seed, DEFAULT_SAMPLE_RATE as f32, params.clone()).into_iter().unzip();
     let mut disp = Dispatcher::with_params(audio_halves, params);
     let mut path = disp.take_audio();
     board
@@ -151,8 +151,8 @@ fn main() {
                 log::info!(
                     "mem: delay[0] {:#x} {}, delay[11] {:#x} {}, scratch {:#x} {}, lanes {:#x} {}; process code {:#x} ({})",
                     a[0], region(a[0]), a[1], region(a[1]), a[2], region(a[2]), a[3], region(a[3]),
-                    dsp::starlids::process_addr(),
-                    if (0x4037_0000..0x403F_0000).contains(&dsp::starlids::process_addr()) { "IRAM" } else { "cache-mapped" },
+                    dronecaster_starlids::process_addr(),
+                    if (0x4037_0000..0x403F_0000).contains(&dronecaster_starlids::process_addr()) { "IRAM" } else { "cache-mapped" },
                 );
             }
             log::info!("rust: alive, selected {}", disp.selected());

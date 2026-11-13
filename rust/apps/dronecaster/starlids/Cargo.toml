@@ -1,0 +1,10 @@
+[package]
+name = "dronecaster-starlids"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+orbiversum-core = { path = "../../../sdk/core" }
+
+[lints]
+workspace = true
