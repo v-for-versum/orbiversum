@@ -36,11 +36,12 @@
 //!
 //! `tests/starlids_ref.rs` compares the output (seeds 5 and 9, 110 Hz, amp 0.8, 4 s at 48 kHz)
 //! with a golden captured from the pre-optimisation implementation (libm `tanh`, 2x oversampled
-//! Moog): the level of 12 probe frequencies (Goertzel, Hann windows) within 1 dB up to 6 kHz,
+//! Moog): the level of 12 probe frequencies (direct DFT correlation, Hann windows) within 1 dB up to 6 kHz,
 //! within 10 dB above (the ladder's stopband), the summed power above 6 kHz within 3 dB, and the
-//! RMS within 0.5 dB. It proves the real-time optimisations (no outer `tanh`, single-pass
-//! Moog, polynomial `exp2`) left the sound character intact; it is a spectral check, not a
-//! bit-exact one.
+//! RMS within 0.5 dB. It checks that the output stays within these tolerances of the golden
+//! (up to ~9 dB difference at 18 kHz in the stopband is accepted, from the real-time changes: no
+//! outer `tanh`, single-pass Moog); it is a spectral tolerance check, not a bit-exact one and
+//! not a listening verdict.
 
 #![warn(missing_docs)]
 #![no_std]

@@ -1,7 +1,7 @@
 //! Eno: port of dronecaster's `Eno.scd` for a fixed-size, allocation-free real-time voice.
 //!
 //! [`Eno`] implements `orbiversum_core::voice::Voice`: `set_params(hz, amp)` sets the base pitch
-//! and the level, `process` renders stereo frames. Everything is allocated in the constructor.
+//! and the level, `process` renders stereo frames. Everything is allocated in the constructor (and again in `set_sample_rate`).
 //!
 //! # Signal flow
 //!
@@ -43,19 +43,23 @@
 //!
 //! # CPU budget
 //!
-//! On the board (ESP32-S3 core 1, block of 128 frames at 48 kHz = 2666 us; fw `aace293-dirty`:
+//! On the board (ESP32-S3 core 1 at 240 MHz, UI refresh about every 5 s, block of 128 frames at
+//! 48 kHz = 2666 us; fw `aace293-dirty`:
 //! reverb 4+2, Klank enabled, `EnvPerc` attack on curve -4, `PAD_CTRL_STRIDE` 4), steady state
 //! with an almost idle UI: core 1 mean ~91.0-91.2 %, max 91-93 % (2430-2470 us), worst block
 //! per the profiler 2380-2405 us. Profile per section (us per block): control ~97, pad 790,
-//! moog 462, klank 262, piano 160, perc 151-281, reverb 225, final 81. Switching Starlids to
-//! Eno while the menu animates exceeded the block budget once (max 100.5-101 %). See the
+//! moog 462, klank 262, piano 160, perc 151-281, reverb 225, final 81. Switching Starlids -> Eno
+//! with the menu animation active (30 flushes in 5 s): max 100.5-101 % (2680-2693 us, above
+//! 2666 us), mean up to 91.4 %, write errors 0, but a block exceeded the budget, so a click is
+//! possible (not checked by ear). See the
 //! constants in the private `tuning` module for the switches that trade sound for CPU.
 //!
 //! # Determinism
 //!
 //! The output is a pure function of `(seed, sample rate, hz, amp)` and the sequence of samples
-//! rendered; the block size does not matter. Random generators are drawn in a fixed order
-//! (pad first, then the note layer), so adding to a later layer does not change an earlier one.
+//! rendered; the block size does not matter. Random generators are drawn in a fixed order:
+//! the plane `Dust` and plane pick and the sub-sine rates first, then the eight pad voices, the
+//! Moog noise, and only then the note layer (so the note layer does not change the pad).
 
 #![warn(missing_docs)]
 #![no_std]

@@ -9,7 +9,8 @@
 //! skipped while its envelope is zero; budget for 281), reverb 225, final 81; the sum is ~2360
 //! at perc 281. The target of <= ~86 % was not reached (about 5 percentage points higher;
 //! Starlids sits at 87 %); the deviation was accepted by the owner and the sound confirmed by
-//! ear. Switching Starlids -> Eno while the menu animation runs (30 flushes in 5 s): max
+//! ear. Measured with core 1 at 240 MHz and the UI refreshing about every 5 s. Switching
+//! Starlids -> Eno with the menu animation active (30 flushes in 5 s): max
 //! 100.5-101 % (2680-2693 us, above 2666), mean up to 91.4 %; write errors 0, but a block
 //! exceeded the budget, so a click is possible (not checked by ear). Source: the layered
 //! platform design spec, 2026-11-12.
@@ -65,7 +66,8 @@ const _: () = assert!(VOICES.is_multiple_of(GROUP) && GROUP == 4, "voice i uses 
 /// Biquad Q of 1/sqrt(2): the maximally flat (Butterworth) response, no resonance peak.
 pub(crate) const Q_BUTTERWORTH: f32 = core::f32::consts::FRAC_1_SQRT_2;
 /// Size in seconds of each pad voice's delay line. The largest delay reached is
-/// (0.02 + 0.01) / 15 s = 2 ms; the extra margin only costs a few bytes.
+/// (0.02 + 0.01) / 15 s = 2 ms; the 2 ms margin is about 96 samples
+/// (~384 bytes) per voice, ~3 KB for 8 voices.
 pub(crate) const MAX_DELAY_S: f32 = 0.004;
 /// log2(5): the pad lowpass cutoff sweeps `hz * 2^(LOG2_5 * (lfo + 1) / 2)`, i.e. from `hz` up to
 /// `5 * hz`. A larger value opens the filter further and makes the pad brighter.

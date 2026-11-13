@@ -8,7 +8,7 @@ origin or licence is claimed here.
 
 Each voice is an audio-rate generator built from the blocks of `orbiversum-core`
 (`rust/sdk/core`) and implements its `Voice` trait: `set_params(hz, amp)` sets the base pitch and
-level, `process` fills stereo `f32` frames. They allocate only at construction, so they run in the
+level, `process` fills stereo `f32` frames. They allocate only at construction (and in `set_sample_rate`), so they run in the
 real-time audio task. The output is a function of the seed, sample rate, `hz` and `amp` only, not of
 the block size the caller uses.
 
