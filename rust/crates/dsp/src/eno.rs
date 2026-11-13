@@ -11,7 +11,7 @@ use blocks::{
     biquad::Biquad,
     comb::{CombL, DelayL},
     env::{Decay2, EnvPerc},
-    fast::{exp2, recip, tanh},
+    fast::{exp2, recip},
     lfo::{Noise0, Noise1, VarLagSine},
     moog::{MoogLadder, MoogStereo},
     noise::{Noise2, PinkNoise},
@@ -50,6 +50,8 @@ const INTRO_DELAY_S: f32 = 0.5;
 const INTRO_RAMP_S: f32 = 3.0;
 const HPF_HZ: f32 = 120.0;
 const VOICES: usize = 8;
+/// Each pad voice gets its control update every this many control steps (staggered across voices).
+const PAD_CTRL_STRIDE: usize = 4;
 const GROUP: usize = 4;
 const GROUPS: usize = VOICES / GROUP;
 const _: () = assert!(VOICES % GROUP == 0 && GROUP == 4, "voice i uses shared saw i % 4");
@@ -115,8 +117,10 @@ impl PadVoice {
         }
     }
 
+    /// Runs once every `PAD_CTRL_STRIDE` control steps, so one call spans that many steps of
+    /// time: every generator below advances by `c` samples per call.
     fn control(&mut self, hz: f32, max_hz: f32) {
-        let c = CTRL as f32;
+        let c = (CTRL * PAD_CTRL_STRIDE) as f32;
         let s = self.lfo.tick(self.f_lfo * c);
         self.lpf.set_lowpass((hz * exp2(LOG2_5 * (s + 1.0) * 0.5)).min(max_hz));
         let d = (0.02 + 0.01 * self.dly_noise.tick(self.f_dly * c)) * (1.0 / 15.0);
@@ -154,6 +158,8 @@ pub struct Eno {
     // pad
     saws: [SawDpw; 4],
     voices: Vec<PadVoice>,
+    /// which residue class of voices gets its control update on the next step
+    pad_rot: usize,
     saw_buf: [[f32; CTRL]; 4],
     scratch: Vec<[[f32; CTRL]; GROUP]>,
     // sub sines
@@ -261,6 +267,7 @@ impl Eno {
             plane_gain: 0.0,
             saws: [SawDpw::new(sr), SawDpw::new(sr), SawDpw::new(sr), SawDpw::new(sr)],
             voices,
+            pad_rot: 0,
             saw_buf: [[0.0; CTRL]; 4],
             scratch: alloc::vec![[[0.0; CTRL]; GROUP]; GROUPS],
             sub: [SinOsc::new(sr, 0.0), SinOsc::new(sr, 0.0)],
@@ -346,8 +353,14 @@ impl Eno {
             let semis = self.plane_notes[i] as f32 + base;
             saw.set_hz((hz * exp2(semis * (1.0 / 12.0))).min(self.max_hz));
         }
-        for v in self.voices.iter_mut() {
-            v.control(hz, self.max_hz);
+        // Pad voices modulate slowly (LFO 0.03-0.1 Hz, noise 5-10 Hz): update VOICES / STRIDE of
+        // them per step, round-robin, so each is refreshed every STRIDE steps instead of every one.
+        let rot = self.pad_rot;
+        self.pad_rot = (rot + 1) % PAD_CTRL_STRIDE;
+        for (i, v) in self.voices.iter_mut().enumerate() {
+            if i % PAD_CTRL_STRIDE == rot {
+                v.control(hz, self.max_hz);
+            }
         }
         for k in 0..2 {
             let s = self.sub_lfo[k].tick(self.sub_f[k] * c);
@@ -497,7 +510,8 @@ impl Voice for Eno {
             pb.mark(P_PAD);
             let cut = self.moog_cut;
             for j in 0..n {
-                let y = self.moog.tick([tanh(l[j]), tanh(r[j])], cut, 0.0);
+                // No outer saturator: the ladder saturates its own input.
+                let y = self.moog.tick([l[j], r[j]], cut, 0.0);
                 l[j] = y[0];
                 r[j] = y[1];
             }

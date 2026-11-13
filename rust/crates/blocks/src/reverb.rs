@@ -28,9 +28,13 @@ impl Comb {
 
     #[inline(always)]
     fn tick(&mut self, x: f32, fb: f32, d1: f32, d2: f32) -> f32 {
-        let out = self.buf[self.i];
+        let i = self.i;
+        debug_assert!(i < self.buf.len());
+        // SAFETY: `i` starts at 0, `buf.len() >= 2` (see `scaled`) and `i` wraps to 0 on reaching
+        // `buf.len()` below, so `i < buf.len()` always holds here.
+        let out = unsafe { *self.buf.get_unchecked(i) };
         self.store = out * d2 + self.store * d1;
-        self.buf[self.i] = x + self.store * fb;
+        unsafe { *self.buf.get_unchecked_mut(i) = x + self.store * fb };
         self.i += 1;
         if self.i == self.buf.len() {
             self.i = 0;
@@ -51,8 +55,11 @@ impl Allpass {
 
     #[inline(always)]
     fn tick(&mut self, x: f32) -> f32 {
-        let b = self.buf[self.i];
-        self.buf[self.i] = x + b * AP_FB;
+        let i = self.i;
+        debug_assert!(i < self.buf.len());
+        // SAFETY: same invariant as `Comb::tick`: `i < buf.len()` (starts at 0, wraps at `len`).
+        let b = unsafe { *self.buf.get_unchecked(i) };
+        unsafe { *self.buf.get_unchecked_mut(i) = x + b * AP_FB };
         self.i += 1;
         if self.i == self.buf.len() {
             self.i = 0;
