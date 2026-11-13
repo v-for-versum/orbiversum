@@ -58,18 +58,6 @@ fn starlids_handles_extreme_hz() {
 }
 
 #[test]
-fn sine_handles_extreme_hz() {
-    use dsp::sine::Sine;
-    for hz in [0.0f32, 1.0, 20_000.0, 24_000.0] {
-        let mut s = Sine::new(SR);
-        s.set_params(hz, 1.0);
-        let mut out = vec![[0.0f32; 2]; 48_000];
-        s.process(&mut out);
-        assert!(out.iter().flatten().all(|x| x.is_finite() && x.abs() <= 1.0), "hz {hz}");
-    }
-}
-
-#[test]
 fn starlids_block_size_independence() {
     // 6 s; params change every 10_000 samples at the same absolute positions for every chunking.
     let n = 288_000;

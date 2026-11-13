@@ -1,4 +1,4 @@
-//! JC3636K718C firmware: two applets (Starlids, Sine), a hold-to-open applet
+//! JC3636K718C firmware: two applets (Starlids, Eno), a hold-to-open applet
 //! menu, audio on core 1, UI on core 0.
 use board_jc3636k718c::menu::{Menu, Outcome};
 use board_jc3636k718c::JcBoard;

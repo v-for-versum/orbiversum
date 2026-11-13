@@ -4,6 +4,5 @@ extern crate alloc;
 
 pub mod eno;
 pub mod prof;
-pub mod sine;
 pub mod starlids;
 pub mod voice;

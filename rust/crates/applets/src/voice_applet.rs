@@ -44,7 +44,35 @@ impl<V: Voice> Applet for VoiceApplet<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dsp::sine::Sine;
+
+    /// Local test voice (the production `Sine` was removed).
+    struct Sine {
+        sr: f32,
+        hz: f32,
+        amp: f32,
+        phase: f32,
+    }
+    impl Sine {
+        fn new(sr: f32) -> Sine {
+            Sine { sr, hz: 440.0, amp: 0.0, phase: 0.0 }
+        }
+    }
+    impl Voice for Sine {
+        fn set_sample_rate(&mut self, sr: f32) {
+            self.sr = sr;
+        }
+        fn set_params(&mut self, hz: f32, amp: f32) {
+            self.hz = hz;
+            self.amp = amp;
+        }
+        fn process(&mut self, out: &mut [[f32; 2]]) {
+            for f in out.iter_mut() {
+                let v = (self.phase * core::f32::consts::TAU).sin() * self.amp;
+                self.phase = (self.phase + self.hz / self.sr).fract();
+                *f = [v, v];
+            }
+        }
+    }
     use os::Applet;
 
     fn peak(a: &mut impl Applet) -> f32 {
@@ -56,7 +84,7 @@ mod tests {
     #[test]
     fn audio_reflects_params() {
         let p = Arc::new(Params::new(440.0, 0.5));
-        let mut a = VoiceApplet::new("Sine", Sine::new(48_000.0), p.clone());
+        let mut a = VoiceApplet::new("Test", Sine::new(48_000.0), p.clone());
         a.start();
         let loud = peak(&mut a);
         assert!(loud > 0.3, "{loud}");
@@ -77,7 +105,7 @@ mod tests {
     #[test]
     fn start_syncs_to_current_params_without_step() {
         let p = Arc::new(Params::new(220.0, 0.5));
-        let mut a = VoiceApplet::new("Sine", Sine::new(48_000.0), p.clone());
+        let mut a = VoiceApplet::new("Test", Sine::new(48_000.0), p.clone());
         // Params change before start (another applet was running): first block already uses them.
         p.set_amp(0.25);
         a.start();

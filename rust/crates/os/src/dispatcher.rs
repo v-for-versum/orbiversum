@@ -275,7 +275,7 @@ mod tests {
     const SR: f32 = 48_000.0;
     const BUF: usize = 4096;
 
-    /// Sine voice; allocates a buffer in `start`, frees it in `stop`.
+    /// Test sine voice; allocates a buffer in `start`, frees it in `stop`.
     struct Mock {
         hz: f32,
         amp: f32,

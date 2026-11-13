@@ -110,7 +110,7 @@ mod tests {
 
     fn ui() -> (ParamUi, Arc<Params>) {
         let p = Arc::new(Params::new(110.0, 0.5));
-        (ParamUi::new("Sine", p.clone()), p)
+        (ParamUi::new("Test", p.clone()), p)
     }
 
     #[test]
