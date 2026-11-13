@@ -2,7 +2,8 @@
 //!
 //! Audio rate, per-sample `tick` is a handful of multiply-adds on two stored outputs
 //! (`y1`, `y2`); no allocation. `set` is control rate (it needs several reciprocals and
-//! sine/cosine evaluations) and keeps the state. Both clamp the frequency to
+//! sine/cosine evaluations) and keeps the state. Cost class: low (`tick` is the per-sample
+//! cost; `set` costs more but runs at control rate only). Both clamp the frequency to
 //! [10, 0.45 * sr] Hz and map NaN parameters to a safe default.
 
 use crate::fast::{exp, recip, sin_cos_0_pi};

@@ -45,7 +45,7 @@ struct Sine {
 
 impl Voice for Sine {
     fn set_sample_rate(&mut self, sr: f32) {
-        self.osc = SinOsc::new(sr, 0.0); // may allocate in general; not real time
+        self.osc = SinOsc::new(sr, 0.0); // reconfiguration, not real time (SinOsc itself does not allocate)
     }
     fn set_params(&mut self, hz: f32, amp: f32) {
         self.hz = hz; // real time: no allocation

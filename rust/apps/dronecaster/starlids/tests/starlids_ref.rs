@@ -1,5 +1,5 @@
 //! Spectral/RMS comparison of Starlids against a golden captured from the
-//! pre-optimisation implementation (libm tanh, full-rate Moog), seeds 5 and 9,
+//! pre-optimisation implementation (libm tanh, 2x-oversampled Moog), seeds 5 and 9,
 //! 110 Hz, amp 0.8, 4 s at 48 kHz.
 
 use dronecaster_starlids::Starlids;
@@ -7,7 +7,7 @@ use orbiversum_core::voice::Voice;
 
 const SR: f32 = 48_000.0;
 const SEEDS: [u64; 2] = [5, 9];
-/// Goertzel probe frequencies (log-spaced, Hz).
+/// DFT probe frequencies (log-spaced, Hz).
 const FREQS: [f32; 12] =
     [60.0, 110.0, 220.0, 440.0, 880.0, 1500.0, 2500.0, 4000.0, 6000.0, 9000.0, 13000.0, 18000.0];
 
@@ -21,7 +21,8 @@ fn render(seed: u64) -> Vec<[f32; 2]> {
     out
 }
 
-/// Mean Goertzel power (dB) of the left channel at each probe frequency, averaged
+/// Mean power (dB) of the left channel at each probe frequency (a direct windowed DFT
+/// correlation at that one frequency, not a Goertzel recursion), averaged
 /// over 8192-sample Hann windows; plus RMS (dB) of both channels.
 fn stats(out: &[[f32; 2]]) -> (Vec<f64>, f64) {
     let x: Vec<f64> = out[24_000..].iter().map(|f| f[0] as f64).collect();

@@ -4,6 +4,10 @@
 //! element, into a caller buffer. The firmware calls `set_sample_rate` at (re)configuration time,
 //! `set_params` when the control values change and `process` once per audio block.
 //!
+//! Cost class: the trait itself adds one dynamic call per block; the cost is the implementor's.
+//! Allocation: `set_params` and `process` must not allocate; only `set_sample_rate` may (it is
+//! reconfiguration, not real time).
+//!
 //! ```
 //! use orbiversum_core::{osc::SinOsc, pan::pan2, voice::Voice};
 //!

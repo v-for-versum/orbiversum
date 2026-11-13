@@ -1,4 +1,4 @@
-# Overrides on top of ../../sdkconfig.jc3636k718c (the board baseline).
+# Overrides on top of ../../../../sdkconfig.jc3636k718c (the board baseline).
 # esp-idf-sys needs a larger main stack than the C app for std threads.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 

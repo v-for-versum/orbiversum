@@ -79,7 +79,7 @@ esp_err_t bsp_audio_out_init(const bsp_audio_out_config_t *cfg)
 
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
     /*
-     * The UI thread feeds this channel; a deeper queue absorbs scheduling
+     * The Rust audio task (pinned to core 1) feeds this channel; a deeper queue absorbs scheduling
      * jitter from LVGL rendering without audible gaps.
      *
      * Twelve descriptors and not six, and the reason is measured rather than
