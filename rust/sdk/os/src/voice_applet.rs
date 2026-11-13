@@ -1,7 +1,7 @@
-//! Audio half: a `dsp::Voice` driven by the shared `os::Params`.
+//! Audio half: a `orbiversum_core::voice::Voice` driven by the shared `crate::Params`.
 use alloc::sync::Arc;
-use dsp::voice::Voice;
-use os::{Applet, AppletInfo, Params};
+use orbiversum_core::voice::Voice;
+use crate::{Applet, AppletInfo, Params};
 
 /// Start/reset policy: applets do NOT own hz/amp. All applets share one
 /// `Params` (the UI half writes it), so the voice is never reset to a private
@@ -73,7 +73,7 @@ mod tests {
             }
         }
     }
-    use os::Applet;
+    use crate::Applet;
 
     fn peak(a: &mut impl Applet) -> f32 {
         let mut buf = [[0.0f32; 2]; 480];

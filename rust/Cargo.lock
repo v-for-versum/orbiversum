@@ -42,7 +42,8 @@ dependencies = [
  "dsp",
  "embedded-graphics",
  "libm",
- "os",
+ "orbiversum-core",
+ "orbiversum-os",
 ]
 
 [[package]]
@@ -105,20 +106,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
-name = "blocks"
-version = "0.1.0"
-dependencies = [
- "libm",
-]
-
-[[package]]
 name = "board-jc3636k718c"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "esp-idf-svc",
  "log",
- "os",
+ "orbiversum-os",
 ]
 
 [[package]]
@@ -392,8 +386,8 @@ dependencies = [
 name = "dsp"
 version = "0.1.0"
 dependencies = [
- "blocks",
  "libm",
+ "orbiversum-core",
 ]
 
 [[package]]
@@ -1074,10 +1068,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "os"
+name = "orbiversum-core"
+version = "0.1.0"
+dependencies = [
+ "libm",
+]
+
+[[package]]
+name = "orbiversum-os"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
+ "libm",
+ "orbiversum-core",
 ]
 
 [[package]]
@@ -1178,6 +1181,7 @@ version = "0.1.0"
 dependencies = [
  "dsp",
  "hound",
+ "orbiversum-core",
 ]
 
 [[package]]

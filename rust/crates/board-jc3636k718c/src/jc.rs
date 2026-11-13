@@ -4,7 +4,7 @@ use crate::display::{FbDisplay, Panel, Rect, STRIP_PIXELS};
 use crate::ffi::{bsp_display_draw_rect, bsp_display_raw_begin, bsp_display_raw_max_pixels};
 use crate::input::JcInput;
 use esp_idf_svc::sys::{self, esp_err_t, ESP_OK};
-use os::{AudioError, AudioOut, Board, Display, InputEvent};
+use orbiversum_os::{AudioError, AudioOut, Board, Display, InputEvent};
 
 /// ST77916 behind the C BSP. The strip buffer is internal, DMA-capable RAM
 /// (the framebuffer itself lives in PSRAM and is only read for dirty rows).

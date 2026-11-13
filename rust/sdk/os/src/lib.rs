@@ -1,13 +1,17 @@
-//! `os`: applet and board abstractions plus the audio/UI dispatcher.
+//! `orbiversum-os`: applet and board abstractions plus the audio/UI dispatcher.
 #![cfg_attr(not(test), no_std)]
 extern crate alloc;
 
 pub mod applet;
 pub mod board;
 pub mod dispatcher;
+pub mod param_ui;
 pub mod params;
+pub mod voice_applet;
 
 pub use applet::{Applet, AppletInfo, AppletUi, Dirty, InputEvent, MAX_DIRTY};
 pub use board::{AudioError, AudioOut, Board, Canvas, Display, Surface, RenderFn};
 pub use dispatcher::{AudioPath, Dispatcher, DEFAULT_SAMPLE_RATE};
+pub use param_ui::{ParamUi, AMP_STEP, MAX_HZ, MIN_HZ};
 pub use params::Params;
+pub use voice_applet::VoiceApplet;

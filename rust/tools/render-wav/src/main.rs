@@ -1,6 +1,7 @@
 //! Host-side renderer: drone voice -> 48 kHz stereo 16-bit WAV.
 
-use dsp::{eno::Eno, starlids::Starlids, voice::Voice};
+use dsp::{eno::Eno, starlids::Starlids};
+use orbiversum_core::voice::Voice;
 use std::process::exit;
 
 const SR: u32 = 48_000;

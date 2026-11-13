@@ -8,7 +8,7 @@ use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::{Baseline, Text};
-use os::{Canvas, Dirty, InputEvent};
+use orbiversum_os::{Canvas, Dirty, InputEvent};
 
 /// Rows shown at once (the list scrolls beyond that).
 pub const VISIBLE: usize = 6;
@@ -138,7 +138,7 @@ mod tests {
     use super::*;
     use alloc::vec;
     use embedded_graphics::pixelcolor::Rgb565;
-    use os::Surface;
+    use orbiversum_os::Surface;
 
     struct Null;
     impl Surface for Null {

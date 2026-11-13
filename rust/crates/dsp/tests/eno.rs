@@ -1,5 +1,5 @@
 use dsp::eno::Eno;
-use dsp::voice::Voice;
+use orbiversum_core::voice::Voice;
 
 const SR: f32 = 48_000.0;
 

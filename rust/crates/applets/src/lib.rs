@@ -1,19 +1,15 @@
 //! Starlids and Eno applets: an audio half (`VoiceApplet`) and a UI half
-//! (`ParamUi`) that share only `os::Params`.
+//! (`ParamUi`) that share only `orbiversum_os::Params`.
 #![cfg_attr(not(test), no_std)]
 extern crate alloc;
 
-mod ui;
-mod voice_applet;
-
-pub use ui::{ParamUi, AMP_STEP, MAX_HZ, MIN_HZ};
-pub use voice_applet::VoiceApplet;
+use orbiversum_os::{ParamUi, VoiceApplet};
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use dsp::{eno::Eno, starlids::Starlids};
-use os::{Applet, AppletUi, Params};
+use orbiversum_os::{Applet, AppletUi, Params};
 
 /// Starlids and Eno as (audio half, UI half) pairs sharing `params`.
 /// Task 10: pass the audio halves to `Dispatcher::with_params(.., params)`

@@ -1,4 +1,4 @@
-use blocks::{biquad::Biquad, delay::DelayC, moog::MoogLadder};
+use orbiversum_core::{biquad::Biquad, delay::DelayC, moog::MoogLadder};
 
 const SR: f32 = 48000.0;
 const N: usize = 8192;

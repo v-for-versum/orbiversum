@@ -5,7 +5,7 @@ use crate::ffi::{bsp_audio_out_init, bsp_audio_out_write, BspAudioOutConfig};
 use esp_idf_svc::hal::cpu::Core;
 use esp_idf_svc::hal::task::thread::ThreadSpawnConfiguration;
 use esp_idf_svc::sys::{self, esp_err_t, ESP_OK};
-use os::{AudioError, AudioOut, RenderFn};
+use orbiversum_os::{AudioError, AudioOut, RenderFn};
 
 pub const SAMPLE_RATE: u32 = 48_000;
 /// Frames per render call.

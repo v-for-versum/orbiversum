@@ -1,5 +1,5 @@
 //! Framebuffer display: applets draw into a full RGB565 framebuffer through
-//! `os::Surface`; `flush` sends only the dirty regions to the panel in strips
+//! `orbiversum_os::Surface`; `flush` sends only the dirty regions to the panel in strips
 //! that fit one SPI transfer. Everything here is host-testable; the panel
 //! itself sits behind the `Panel` trait.
 use alloc::vec;
@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565};
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::Rectangle;
-use os::{Dirty, Surface, MAX_DIRTY};
+use orbiversum_os::{Dirty, Surface, MAX_DIRTY};
 
 pub const WIDTH: usize = 360;
 pub const HEIGHT: usize = 360;
@@ -158,7 +158,7 @@ impl<P: Panel> Surface for FbDisplay<P> {
     }
 }
 
-impl<P: Panel> os::Display for FbDisplay<P> {
+impl<P: Panel> orbiversum_os::Display for FbDisplay<P> {
     fn size(&self) -> (u32, u32) {
         (WIDTH as u32, HEIGHT as u32)
     }
@@ -183,7 +183,7 @@ impl<P: Panel> os::Display for FbDisplay<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use os::Display;
+    use orbiversum_os::Display;
 
     fn rect(x: i32, y: i32, w: u32, h: u32) -> Rectangle {
         Rectangle::new(Point::new(x, y), Size::new(w, h))

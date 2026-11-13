@@ -12,7 +12,8 @@ publish = false
 esp-idf-svc = "0.53"
 log = "0.4"
 board-jc3636k718c = { path = "../crates/board-jc3636k718c" }
-os = { path = "../crates/os" }
+orbiversum-os = { path = "../sdk/os" }
+orbiversum-core = { path = "../sdk/core" }
 applets = { path = "../crates/applets" }
 dsp = { path = "../crates/dsp" }
 

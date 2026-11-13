@@ -1,5 +1,5 @@
 use dsp::starlids::Starlids;
-use dsp::voice::Voice;
+use orbiversum_core::voice::Voice;
 use std::alloc::{GlobalAlloc, Layout, System};
 
 struct Counting;

@@ -6,7 +6,7 @@ use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::{Baseline, Text};
-use os::{AppletInfo, AppletUi, Canvas, Dirty, InputEvent, Params};
+use crate::{AppletInfo, AppletUi, Canvas, Dirty, InputEvent, Params};
 
 pub const MIN_HZ: f32 = 20.0;
 pub const MAX_HZ: f32 = 2000.0;
@@ -92,7 +92,7 @@ mod tests {
     use embedded_graphics::pixelcolor::Rgb565;
     use embedded_graphics::prelude::{Pixel, Size};
     use embedded_graphics::primitives::Rectangle;
-    use os::{AppletUi, Canvas, Dirty, InputEvent, Params, Surface};
+    use crate::{AppletUi, Canvas, Dirty, InputEvent, Params, Surface};
 
     struct Mock;
     impl Surface for Mock {

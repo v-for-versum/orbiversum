@@ -4,10 +4,10 @@
 //! `CTRL` samples at fixed absolute positions, so the output does not
 //! depend on the caller's block size.
 
-use crate::prof;
-use crate::voice::Voice;
+use orbiversum_core::prof;
+use orbiversum_core::voice::Voice;
 use alloc::vec::Vec;
-use blocks::{
+use orbiversum_core::{
     biquad::Biquad,
     delay::DelayC,
     lfo::{Noise0, Noise1, VarLagSine},
@@ -16,7 +16,7 @@ use blocks::{
     pan::pan2,
     rng::Rng,
 };
-use blocks::fast::exp2 as exp2f;
+use orbiversum_core::fast::exp2 as exp2f;
 
 /// 2^x-based replacement for libm::powf with a constant base (f32 only).
 fn pow_k(log2_base: f32, e: f32) -> f32 {
@@ -100,8 +100,8 @@ impl Lane {
 
     fn control(&mut self, hz: f32, max_hz: f32) {
         let c = CTRL as f32;
-        let o1 = blocks::fast::floor(self.tri1.tick(self.f_tri1 * c) + 1.0);
-        let o2 = blocks::fast::floor(self.tri2.tick(self.f_tri2 * c) + 1.0);
+        let o1 = orbiversum_core::fast::floor(self.tri1.tick(self.f_tri1 * c) + 1.0);
+        let o2 = orbiversum_core::fast::floor(self.tri2.tick(self.f_tri2 * c) + 1.0);
         // The octave/fifth steps change rarely: recompute the ratio only when they do.
         if o1 != self.oct.0 || o2 != self.oct.1 {
             self.oct = (o1, o2);

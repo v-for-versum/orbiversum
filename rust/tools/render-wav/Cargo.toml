@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 dsp = { path = "../../crates/dsp" }
+orbiversum-core = { path = "../../sdk/core" }
 hound = "3.5"
 
 [lints]

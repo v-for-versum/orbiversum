@@ -3,7 +3,7 @@
 use board_jc3636k718c::menu::{Menu, Outcome};
 use board_jc3636k718c::JcBoard;
 use esp_idf_svc::sys::{self, esp_err_t, EspError};
-use os::{AppletUi, Board, Canvas, Dirty, Dispatcher, Params, DEFAULT_SAMPLE_RATE};
+use orbiversum_os::{AppletUi, Board, Canvas, Dirty, Dispatcher, Params, DEFAULT_SAMPLE_RATE};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -125,24 +125,24 @@ fn main() {
                     unsafe { sys::heap_caps_get_free_size(sys::MALLOC_CAP_INTERNAL) },
                 );
             }
-            let (blocks, t) = dsp::prof::take();
+            let (blocks, t) = orbiversum_core::prof::take();
             #[allow(clippy::manual_checked_ops, reason = "blocks > 0 also gates the whole profile log, not only the division")]
             if blocks > 0 {
                 let mut line = std::string::String::new();
                 let mut total = 0u32;
-                for (name, v) in dsp::prof::names().iter().zip(t.iter()) {
+                for (name, v) in orbiversum_core::prof::names().iter().zip(t.iter()) {
                     let us = v / CYCLES_PER_US / blocks;
                     total += us;
                     line.push_str(&format!(" {name} {us}"));
                 }
                 log::info!("prof: us/block over {blocks} blocks:{line} | sum {total}");
-                let (wt, w) = dsp::prof::take_worst();
+                let (wt, w) = orbiversum_core::prof::take_worst();
                 let mut wl = std::string::String::new();
-                for (name, v) in dsp::prof::names().iter().zip(w.iter()) {
+                for (name, v) in orbiversum_core::prof::names().iter().zip(w.iter()) {
                     wl.push_str(&format!(" {name} {}", v / CYCLES_PER_US));
                 }
                 log::info!("prof: worst block {} us:{wl}", wt / CYCLES_PER_US);
-                let a = dsp::prof::addrs();
+                let a = orbiversum_core::prof::addrs();
                 let region = |p: usize| match p {
                     0x3C00_0000..=0x3DFF_FFFF => "PSRAM",
                     0x3FC0_0000..=0x3FCF_FFFF => "internal",

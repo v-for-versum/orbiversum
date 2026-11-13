@@ -1,11 +1,11 @@
-//! Input: encoder steps and touch state -> `os::InputEvent`.
+//! Input: encoder steps and touch state -> `orbiversum_os::InputEvent`.
 //!
 //! The board has NO encoder push contact (the BSP says so), so `Press` is
 //! produced by holding a finger on the touch screen for `LONG_PRESS_MS`.
 //! A shorter touch is a `Tap` at the point where it landed. `InputFilter` is
 //! pure (host-testable); `JcInput` (device only) feeds it from the C BSP.
 use alloc::collections::VecDeque;
-use os::InputEvent;
+use orbiversum_os::InputEvent;
 
 /// Hold time that turns a touch into `Press`.
 pub const LONG_PRESS_MS: u32 = 600;

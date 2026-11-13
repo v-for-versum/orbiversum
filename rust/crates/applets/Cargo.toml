@@ -4,8 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-os = { path = "../os" }
+orbiversum-os = { path = "../../sdk/os" }
 dsp = { path = "../dsp" }
+orbiversum-core = { path = "../../sdk/core" }
 embedded-graphics = { version = "0.8.2", default-features = false }
 libm = "0.2"
 

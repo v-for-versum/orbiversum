@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-blocks = { path = "../blocks" }
+orbiversum-core = { path = "../../sdk/core" }
 libm = "0.2"
 
 [lints]

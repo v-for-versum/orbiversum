@@ -4,10 +4,10 @@
 //! samples at fixed absolute positions, so the output does not depend on the
 //! caller's block size.
 
-use crate::prof;
-use crate::voice::Voice;
+use orbiversum_core::prof;
+use orbiversum_core::voice::Voice;
 use alloc::vec::Vec;
-use blocks::{
+use orbiversum_core::{
     biquad::Biquad,
     comb::{CombL, DelayL},
     env::{Decay2, EnvPerc},

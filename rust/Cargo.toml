@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/blocks", "crates/dsp", "crates/os", "crates/board-jc3636k718c", "crates/applets", "tools/render-wav"]
-default-members = ["crates/blocks", "crates/dsp", "crates/os", "crates/board-jc3636k718c", "crates/applets", "tools/render-wav"]
+members = ["sdk/core", "sdk/os", "crates/dsp", "crates/board-jc3636k718c", "crates/applets", "tools/render-wav"]
+default-members = ["sdk/core", "sdk/os", "crates/dsp", "crates/board-jc3636k718c", "crates/applets", "tools/render-wav"]
 
 exclude = ["firmware-jc3636k718c"]
 
