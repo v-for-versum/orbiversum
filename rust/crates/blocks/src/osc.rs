@@ -12,7 +12,6 @@ fn advance(phase: f32, inc: f32) -> f32 {
 
 /// Band-limited saw (2nd-order DPW), output -1..1.
 pub struct SawDpw {
-    sr: f32,
     inv_sr: f32,
     /// bipolar phase in [-1, 1)
     x: f32,
@@ -27,7 +26,7 @@ pub struct SawDpw {
 
 impl SawDpw {
     pub fn new(sr: f32) -> SawDpw {
-        SawDpw { sr, inv_sr: 1.0 / sr, x: 0.0, prev_sq: 0.0, hz_c: f32::NAN, dx: 0.0, inv_2dx: 0.0, flat: 0.0 }
+        SawDpw { inv_sr: 1.0 / sr, x: 0.0, prev_sq: 0.0, hz_c: f32::NAN, dx: 0.0, inv_2dx: 0.0, flat: 0.0 }
     }
 
     /// Sets the pitch; call when it changes (control rate), then use `tick_fixed`.
@@ -63,14 +62,13 @@ impl SawDpw {
 }
 
 pub struct Pulse {
-    sr: f32,
     inv_sr: f32,
     phase: f32,
 }
 
 impl Pulse {
     pub fn new(sr: f32) -> Pulse {
-        Pulse { sr, inv_sr: 1.0 / sr, phase: 0.0 }
+        Pulse { inv_sr: 1.0 / sr, phase: 0.0 }
     }
 
     /// `width` is the duty (0..1); output is +1 while phase < width, else -1.
@@ -84,7 +82,6 @@ impl Pulse {
 }
 
 pub struct SinOsc {
-    sr: f32,
     inv_sr: f32,
     phase: f32,
 }
@@ -92,7 +89,7 @@ pub struct SinOsc {
 impl SinOsc {
     /// `phase` in cycles (0..1).
     pub fn new(sr: f32, phase: f32) -> SinOsc {
-        SinOsc { sr, inv_sr: 1.0 / sr, phase: phase - crate::fast::floor(phase) }
+        SinOsc { inv_sr: 1.0 / sr, phase: phase - crate::fast::floor(phase) }
     }
 
     #[inline(always)]
@@ -105,14 +102,13 @@ impl SinOsc {
 
 /// Naive triangle, -1..1.
 pub struct LfTri {
-    sr: f32,
     inv_sr: f32,
     phase: f32,
 }
 
 impl LfTri {
     pub fn new(sr: f32, phase: f32) -> LfTri {
-        LfTri { sr, inv_sr: 1.0 / sr, phase: phase - crate::fast::floor(phase) }
+        LfTri { inv_sr: 1.0 / sr, phase: phase - crate::fast::floor(phase) }
     }
 
     #[inline(always)]

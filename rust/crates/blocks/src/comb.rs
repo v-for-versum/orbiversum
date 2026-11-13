@@ -48,7 +48,7 @@ impl DelayL {
     #[inline(always)]
     fn read(&self) -> f32 {
         let (k, f, mask, w) = (self.k, self.f, self.mask, self.w);
-        debug_assert!(self.buf.len() == mask + 1 && w <= mask && k >= 1 && k + 1 <= mask);
+        debug_assert!(self.buf.len() == mask + 1 && w <= mask && k >= 1 && k < mask);
         let buf = self.buf.as_ptr();
         // SAFETY: buf.len() == mask + 1 (power of two); every masked index is <= mask.
         let (a, b) = unsafe { (*buf.add(w.wrapping_sub(k) & mask), *buf.add(w.wrapping_sub(k + 1) & mask)) };

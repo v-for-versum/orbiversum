@@ -15,6 +15,7 @@ pub fn f32_to_i16(x: f32) -> i16 {
 /// Convert interleaved stereo float frames into i16 (`out.len() == 2 * frames.len()`).
 #[inline(never)]
 #[cfg_attr(target_arch = "xtensa", link_section = ".iram1.frames_to_i16")]
+#[allow(clippy::chunks_exact_to_as_chunks, reason = "IRAM hot loop codegen kept as is")]
 pub fn frames_to_i16(frames: &[[f32; 2]], out: &mut [i16]) {
     for (f, o) in frames.iter().zip(out.chunks_exact_mut(2)) {
         o[0] = f32_to_i16(f[0]);

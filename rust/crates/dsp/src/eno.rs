@@ -54,11 +54,11 @@ const VOICES: usize = 8;
 const PAD_CTRL_STRIDE: usize = 4;
 const GROUP: usize = 4;
 const GROUPS: usize = VOICES / GROUP;
-const _: () = assert!(VOICES % GROUP == 0 && GROUP == 4, "voice i uses shared saw i % 4");
+const _: () = assert!(VOICES.is_multiple_of(GROUP) && GROUP == 4, "voice i uses shared saw i % 4");
 const Q_BUTTERWORTH: f32 = core::f32::consts::FRAC_1_SQRT_2;
 /// Largest delay reached: (0.02 + 0.01) / 15 s = 2 ms; margin added.
 const MAX_DELAY_S: f32 = 0.004;
-const LOG2_5: f32 = 2.321_928_1;
+const LOG2_5: f32 = 2.321_928;
 const LOG2_30: f32 = 4.906_890_6;
 /// LFNoise0.kr(1/3) for the pan.
 const PAN_RATE: f32 = 1.0 / 3.0;
@@ -352,7 +352,7 @@ impl Eno {
         }
         self.plane_gain = 1.0 - self.plane_env.tick(dt);
         if self.plane_delay.tick(trig, dt) {
-            self.plane_notes = PLANES[self.plane_pick.next()];
+            self.plane_notes = PLANES[self.plane_pick.pick()];
         }
         for (i, saw) in self.saws.iter_mut().enumerate() {
             let base = if i == 0 { -36.0 } else { -24.0 };
@@ -404,7 +404,7 @@ impl Eno {
         }
         // current sequence: Dxrand on Dust(0.1) + Impulse(0)
         if self.seq_dust.tick(0.1, dt) | self.seq_imp0.tick(0.0, dt) {
-            self.seq_idx = self.seq_pick.next();
+            self.seq_idx = self.seq_pick.pick();
             self.dseq.reset();
         }
         self.note_trig = self.notepulse.tick(self.noterate, dt);
@@ -466,6 +466,7 @@ impl Voice for Eno {
     // Hot path: keep it in internal instruction RAM so it never waits on the flash/PSRAM cache.
     #[inline(never)]
     #[cfg_attr(target_arch = "xtensa", link_section = ".iram1.eno_process")]
+    #[allow(clippy::needless_range_loop, reason = "indexed lane loops keep the proven codegen of the realtime path")]
     fn process(&mut self, out: &mut [[f32; 2]]) {
         prof::set_names(&ENO_NAMES);
         let amp = self.amp * OUT_TRIM;

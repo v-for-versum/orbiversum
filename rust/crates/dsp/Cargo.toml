@@ -6,3 +6,6 @@ edition.workspace = true
 [dependencies]
 blocks = { path = "../blocks" }
 libm = "0.2"
+
+[lints]
+workspace = true

@@ -23,3 +23,7 @@ embuild = "0.33"
 # is compiled by ESP-IDF's CMake as an extra component.
 [[package.metadata.esp-idf-sys.extra_components]]
 component_dirs = ["../../components/bsp_jc3636k718c"]
+
+# Mirrors the host workspace lints in ../Cargo.toml (this crate is its own workspace root).
+[lints.clippy]
+all = { level = "warn", priority = -1 }

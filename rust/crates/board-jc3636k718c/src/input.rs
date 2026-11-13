@@ -90,7 +90,7 @@ impl InputFilter {
         }
     }
 
-    pub fn next(&mut self) -> Option<InputEvent> {
+    pub fn pop(&mut self) -> Option<InputEvent> {
         self.out.pop_front()
     }
 }
@@ -146,11 +146,11 @@ mod device {
             JcInput { filter: InputFilter::new(read()) }
         }
         pub fn poll(&mut self) -> Option<InputEvent> {
-            if let Some(e) = self.filter.next() {
+            if let Some(e) = self.filter.pop() {
                 return Some(e);
             }
             self.filter.update(now_ms(), read());
-            self.filter.next()
+            self.filter.pop()
         }
     }
 }
@@ -163,7 +163,7 @@ mod tests {
         RawInput { steps: 0, contact: 0, pressed: false, x: 0, y: 0 }
     }
     fn drain(f: &mut InputFilter) -> alloc::vec::Vec<InputEvent> {
-        core::iter::from_fn(|| f.next()).collect()
+        core::iter::from_fn(|| f.pop()).collect()
     }
 
     #[test]

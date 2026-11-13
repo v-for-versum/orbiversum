@@ -6,7 +6,6 @@ use crate::fast::{self, sin_cos_0_pi};
 /// Stepped random (LFNoise0): new value in -1..1 `hz` times per second.
 pub struct Noise0 {
     rng: Rng,
-    sr: f32,
     inv_sr: f32,
     phase: f32,
     value: f32,
@@ -15,7 +14,7 @@ pub struct Noise0 {
 impl Noise0 {
     pub fn new(mut rng: Rng, sr: f32) -> Noise0 {
         let value = rng.range(-1.0, 1.0);
-        Noise0 { rng, sr, inv_sr: 1.0 / sr, phase: 0.0, value }
+        Noise0 { rng, inv_sr: 1.0 / sr, phase: 0.0, value }
     }
 
     #[inline(always)]
@@ -32,7 +31,6 @@ impl Noise0 {
 /// Linearly interpolated random (LFNoise1).
 pub struct Noise1 {
     rng: Rng,
-    sr: f32,
     inv_sr: f32,
     phase: f32,
     from: f32,
@@ -43,7 +41,7 @@ impl Noise1 {
     pub fn new(mut rng: Rng, sr: f32) -> Noise1 {
         let from = rng.range(-1.0, 1.0);
         let to = rng.range(-1.0, 1.0);
-        Noise1 { rng, sr, inv_sr: 1.0 / sr, phase: 0.0, from, to }
+        Noise1 { rng, inv_sr: 1.0 / sr, phase: 0.0, from, to }
     }
 
     #[inline(always)]
@@ -62,7 +60,6 @@ impl Noise1 {
 /// A target change restarts the ramp from the current value.
 pub struct VarLagSine {
     sr: f32,
-    inv_sr: f32,
     start: f32,
     target: f32,
     pos: f32,
@@ -72,7 +69,7 @@ pub struct VarLagSine {
 
 impl VarLagSine {
     pub fn new(sr: f32) -> VarLagSine {
-        VarLagSine { sr, inv_sr: 1.0 / sr, start: 0.0, target: 0.0, pos: 1.0, value: 0.0, primed: false }
+        VarLagSine { sr, start: 0.0, target: 0.0, pos: 1.0, value: 0.0, primed: false }
     }
 
     #[inline(always)]

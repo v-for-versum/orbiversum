@@ -16,7 +16,6 @@ use blocks::{
     pan::pan2,
     rng::Rng,
 };
-use blocks::fast::tanh;
 use blocks::fast::exp2 as exp2f;
 
 /// 2^x-based replacement for libm::powf with a constant base (f32 only).
@@ -30,8 +29,8 @@ const CTRL: usize = 32;
 const LANES: usize = 12;
 /// Lanes processed together in the hot loops (must divide LANES).
 const GROUP: usize = 4;
-const _: () = assert!(LANES % GROUP == 0, "lane loops process whole groups");
-const _: () = assert!(CTRL % 2 == 0 && CTRL > 0, "control segments are CTRL samples");
+const _: () = assert!(LANES.is_multiple_of(GROUP), "lane loops process whole groups");
+const _: () = assert!(CTRL.is_multiple_of(2) && CTRL > 0, "control segments are CTRL samples");
 const Q_BUTTERWORTH: f32 = core::f32::consts::FRAC_1_SQRT_2;
 /// Largest delay time reached: (0.02 + 0.01) / 15 s = 2 ms; margin added.
 const MAX_DELAY_S: f32 = 0.004;
@@ -129,7 +128,6 @@ const PAN_RATE: f32 = 1.0 / 3.0;
 
 pub struct Starlids {
     seed: u64,
-    sr: f32,
     hz: f32,
     amp: f32,
     pos: usize,
@@ -160,7 +158,6 @@ impl Starlids {
         }
         let mut s = Starlids {
             seed,
-            sr,
             hz: 110.0,
             amp: 0.0,
             pos: 0,
@@ -217,6 +214,7 @@ impl Voice for Starlids {
     // Hot path: keep it in internal instruction RAM so it never waits on the flash/PSRAM cache.
     #[inline(never)]
     #[cfg_attr(target_arch = "xtensa", link_section = ".iram1.starlids_process")]
+    #[allow(clippy::needless_range_loop, reason = "indexed lane loops keep the proven codegen of the realtime path")]
     fn process(&mut self, out: &mut [[f32; 2]]) {
         let gain = self.amp * (1.0 / 12.0);
         let sub_gain = gain * core::f32::consts::FRAC_1_SQRT_2;

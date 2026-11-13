@@ -15,7 +15,9 @@ impl Dust {
 
     #[inline(always)]
     pub fn tick(&mut self, density_hz: f32, dt: f32) -> bool {
-        if !(density_hz > 0.0) {
+        #[allow(clippy::neg_cmp_op_on_partial_ord, reason = "NaN density must return false; keeps exact semantics")]
+        let silent = !(density_hz > 0.0);
+        if silent {
             return false;
         }
         let p = (density_hz * dt).min(1.0);
@@ -102,7 +104,7 @@ impl Dxrand {
     }
 
     #[inline(always)]
-    pub fn next(&mut self) -> usize {
+    pub fn pick(&mut self) -> usize {
         let n = self.n;
         if n <= 1 {
             return 0;
@@ -224,15 +226,15 @@ mod tests {
         let mut seen = [false; 4];
         let mut prev = usize::MAX;
         for _ in 0..10_000 {
-            let v = d.next();
+            let v = d.pick();
             assert!(v < 4 && v != prev);
             seen[v] = true;
             prev = v;
         }
         assert!(seen.iter().all(|&s| s));
         let mut one = Dxrand::new(Rng::new(7), 1);
-        assert!((0..100).all(|_| one.next() == 0));
-        assert_eq!(Dxrand::new(Rng::new(7), 0).next(), 0);
+        assert!((0..100).all(|_| one.pick() == 0));
+        assert_eq!(Dxrand::new(Rng::new(7), 0).pick(), 0);
     }
 
     #[test]

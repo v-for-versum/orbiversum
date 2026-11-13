@@ -58,6 +58,7 @@ const RMS_TOL_DB: f64 = 0.5;
 ///  1. the outer `tanh` before the Moog is gone (the ladder saturates its input itself,
 ///     so the old signal went through tanh twice);
 ///  2. the Moog runs ONE pass per sample instead of 2x oversampling.
+///
 /// Up to 6 kHz the spectrum stays within 1 dB. Above 6 kHz is the ladder's stopband
 /// (60 dB and more under the peak): there the single-pass ladder rolls off differently
 /// (up to ~9 dB at 18 kHz, where the level is -55 dB against +36 dB at the peak), so the

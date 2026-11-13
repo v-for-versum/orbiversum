@@ -10,3 +10,6 @@ embedded-graphics = { version = "0.8.2", default-features = false }
 [target.'cfg(target_os = "espidf")'.dependencies]
 esp-idf-svc = "0.53"
 log = "0.4"
+
+[lints]
+workspace = true

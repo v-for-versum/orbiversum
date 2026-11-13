@@ -6,7 +6,6 @@ pub struct Biquad {
     sr: f32,
     inv_sr: f32,
     inv_2q: f32,
-    q: f32,
     b0: f32,
     b1: f32,
     b2: f32,
@@ -18,7 +17,7 @@ pub struct Biquad {
 
 impl Biquad {
     fn blank(sr: f32, q: f32) -> Biquad {
-        Biquad { sr, inv_sr: 1.0 / sr, inv_2q: 0.5 / q, q, b0: 1.0, b1: 0.0, b2: 0.0, a1: 0.0, a2: 0.0, z1: 0.0, z2: 0.0 }
+        Biquad { sr, inv_sr: 1.0 / sr, inv_2q: 0.5 / q, b0: 1.0, b1: 0.0, b2: 0.0, a1: 0.0, a2: 0.0, z1: 0.0, z2: 0.0 }
     }
 
     #[inline(always)]
@@ -98,7 +97,7 @@ mod tests {
     fn lowpass_attenuates_above_cutoff() {
         let mut f = Biquad::lowpass(SR, 500.0, 0.707);
         let rms = rms_after_settle(&mut f, 5000.0);
-        let in_rms = 0.7071;
+        let in_rms = core::f32::consts::FRAC_1_SQRT_2;
         let db = 20.0 * libm::log10f(rms / in_rms);
         assert!(db < -20.0, "attenuation {db} dB");
     }

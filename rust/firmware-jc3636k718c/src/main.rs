@@ -126,6 +126,7 @@ fn main() {
                 );
             }
             let (blocks, t) = dsp::prof::take();
+            #[allow(clippy::manual_checked_ops, reason = "blocks > 0 also gates the whole profile log, not only the division")]
             if blocks > 0 {
                 let mut line = std::string::String::new();
                 let mut total = 0u32;

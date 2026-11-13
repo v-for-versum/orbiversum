@@ -63,15 +63,15 @@ pub fn floor(x: f32) -> f32 {
 /// ESP32-S3 (no f64 FPU) becomes software float and costs microseconds per call.
 #[inline(always)]
 pub fn sin(x: f32) -> f32 {
-    const INV_PI: f32 = 0.318_309_88;
+    const INV_PI: f32 = core::f32::consts::FRAC_1_PI;
     // n = round(x / pi), r = x - n*pi in [-pi/2, pi/2], sin(x) = (-1)^n sin(r)
     let n = floor(x * INV_PI + 0.5);
-    let r = (x - n * 3.140_625) - n * 9.676_535_6e-4; // pi split in two for accuracy
+    let r = (x - n * 3.140_625) - n * 9.676_536e-4; // pi split in two for accuracy
     let r2 = r * r;
     let p = r
         * (1.0
             + r2 * (-0.166_666_67
-                + r2 * (8.333_329_3e-3 + r2 * (-1.984_087_4e-4 + r2 * (2.752_556_2e-6 - 2.388_985_9e-8 * r2)))));
+                + r2 * (8.333_329e-3 + r2 * (-1.984_087_4e-4 + r2 * (2.752_556_2e-6 - 2.388_985_9e-8 * r2)))));
     let odd = (n as i32 & 1) as f32;
     p * (1.0 - 2.0 * odd)
 }
@@ -88,12 +88,12 @@ pub fn sin_cos_0_pi(x: f32) -> (f32, f32) {
     let s = r
         * (1.0
             + r2 * (-0.166_666_67
-                + r2 * (8.333_329_3e-3 + r2 * (-1.984_087_4e-4 + r2 * (2.752_556_2e-6 - 2.388_985_9e-8 * r2)))));
+                + r2 * (8.333_329e-3 + r2 * (-1.984_087_4e-4 + r2 * (2.752_556_2e-6 - 2.388_985_9e-8 * r2)))));
     // Taylor to x^12: truncation 6e-9 at pi/2
     let c = 1.0
         + r2 * (-0.5
             + r2 * (4.166_666_7e-2
-                + r2 * (-1.388_888_9e-3 + r2 * (2.480_158_7e-5 + r2 * (-2.755_731_9e-7 + r2 * 2.087_675_7e-9)))));
+                + r2 * (-1.388_888_9e-3 + r2 * (2.480_158_7e-5 + r2 * (-2.755_732e-7 + r2 * 2.087_675_7e-9)))));
     (s, c * (1.0 - 2.0 * hi))
 }
 
@@ -110,7 +110,7 @@ pub fn exp2(x: f32) -> f32 {
     let n = floor(x);
     let f = x - n;
     let p = 1.0
-        + f * (0.693_147_2
+        + f * (core::f32::consts::LN_2
             + f * (0.240_226_5
                 + f * (0.055_504_11 + f * (0.009_618_129 + f * (0.001_333_355_8 + f * 0.000_154_035_3)))));
     p * f32::from_bits(((n as i32 + 127) as u32) << 23)

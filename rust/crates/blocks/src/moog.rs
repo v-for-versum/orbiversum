@@ -4,7 +4,6 @@ use crate::fast::tanh_cheap as tanh;
 use crate::fast::exp as expf;
 
 pub struct MoogLadder {
-    sr: f32,
     inv_sr: f32,
     inv_passes: f32,
     /// oversampling passes per tick (1 or 2)
@@ -27,7 +26,7 @@ impl MoogLadder {
     /// `passes` ladder iterations per tick (1 = no oversampling, cheaper).
     pub fn with_oversample(sr: f32, passes: usize) -> MoogLadder {
         let passes = passes.clamp(1, 2);
-        MoogLadder { sr, inv_sr: 1.0 / sr, inv_passes: 1.0 / passes as f32, passes, s: [0.0; 4], last: 0.0, ts: [0.0; 4], cached_cutoff: f32::NAN, tune: 0.0, acr: 0.0 }
+        MoogLadder { inv_sr: 1.0 / sr, inv_passes: 1.0 / passes as f32, passes, s: [0.0; 4], last: 0.0, ts: [0.0; 4], cached_cutoff: f32::NAN, tune: 0.0, acr: 0.0 }
     }
 
     /// `res` 0..4; clamped to 3.8 so the ladder always rings out instead of
