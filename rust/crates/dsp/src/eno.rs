@@ -75,6 +75,9 @@ const TUNE_UP: f32 = 1.0005;
 const TUNE_DOWN: f32 = 0.9996;
 const STRING_DECAY: f32 = 6.0;
 const PIANO_MAX_DELAY_S: f32 = 0.025;
+/// The piano string loop is skipped this long after the last note: 8 s of a 6 s (-60 dB) decay is
+/// below -80 dB, so the skipped tail is inaudible. Counted in control steps (block-size independent).
+const PIANO_LIVE_S: f32 = 8.0;
 
 const PLANES: [[i8; 4]; 4] = [[0, 4, 7, 12], [4, 7, 11, 16], [-3, 0, 4, 7], [-3, 0, 5, 9]];
 
@@ -195,6 +198,8 @@ pub struct Eno {
     decay2: Decay2,
     combs: [CombL; 2],
     piano_hz: f32,
+    /// Control steps left until the piano string loop can be skipped.
+    piano_live: u32,
     piano_lpf: RLpf,
     piano_hpf: Biquad,
     // PolyPerc
@@ -298,6 +303,7 @@ impl Eno {
             decay2: Decay2::new(sr, 0.01, 1.0),
             combs: [CombL::new(sr, PIANO_MAX_DELAY_S), CombL::new(sr, PIANO_MAX_DELAY_S)],
             piano_hz: f32::NAN,
+            piano_live: 0,
             piano_lpf: RLpf::new(sr),
             piano_hpf: Biquad::highpass(sr, 40.0, Q_BUTTERWORTH),
             pulse: Pulse::new(sr),
@@ -402,7 +408,9 @@ impl Eno {
             self.dseq.reset();
         }
         self.note_trig = self.notepulse.tick(self.noterate, dt);
+        self.piano_live = self.piano_live.saturating_sub(1);
         if self.note_trig {
+            self.piano_live = (PIANO_LIVE_S * self.sr / CTRL as f32) as u32;
             self.seqnote = self.dseq.next(AIRPORTS[self.seq_idx]);
             self.perc_env.trigger();
         }
@@ -537,7 +545,7 @@ impl Voice for Eno {
                 trig = 1.0;
             }
             let nhz = self.noise_hz;
-            for j in 0..n {
+            for j in 0..if self.piano_live > 0 { n } else { 0 } {
                 let e = self.decay2.tick(trig);
                 trig = 0.0;
                 let x = self.noise2.tick(nhz) * e;
