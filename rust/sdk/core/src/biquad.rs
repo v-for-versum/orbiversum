@@ -1,7 +1,29 @@
 //! RBJ cookbook biquads (transposed direct form II).
+//!
+//! Audio rate; state is two delay values (`z1`, `z2`) plus five normalised coefficients.
+//! No allocation. `tick` is five multiplies and four adds per sample; recomputing
+//! coefficients (`set_lowpass`/`set_highpass`) costs one [`crate::fast::sin_cos_0_pi`] and
+//! one [`crate::fast::recip`], so do it at control rate.
+//!
+//! ```
+//! use orbiversum_core::biquad::Biquad;
+//!
+//! let mut lp = Biquad::lowpass(48_000.0, 1000.0, 0.707);
+//! let mut y = 0.0;
+//! for _ in 0..4800 {
+//!     y = lp.tick(1.0); // DC passes a lowpass with unity gain
+//! }
+//! assert!((y - 1.0).abs() < 1e-3);
+//! ```
 
 use crate::fast::sin_cos_0_pi;
 
+/// Second-order IIR filter, lowpass or highpass, with fixed Q.
+///
+/// With `w0 = 2*pi*hz/sr`, `alpha = sin(w0) / (2*Q)` and `c = cos(w0)`, the lowpass has
+/// `b0 = b2 = (1-c)/2`, `b1 = 1-c`, the highpass `b0 = b2 = (1+c)/2`, `b1 = -(1+c)`, and
+/// both `a0 = 1+alpha`, `a1 = -2c`, `a2 = 1-alpha`. Coefficients are divided by `a0`
+/// once. `tick` runs `y = b0*x + z1; z1 = b1*x - a1*y + z2; z2 = b2*x - a2*y`.
 pub struct Biquad {
     sr: f32,
     inv_sr: f32,
@@ -38,19 +60,25 @@ impl Biquad {
         self.a2 = a2 * inv;
     }
 
+    /// Lowpass at `hz` (Hz) with quality factor `q` for sample rate `sr` (Hz). `q` is fixed
+    /// for the life of the filter and must be > 0 (not checked). `hz` is clamped to
+    /// [1, 0.49 * sr].
     pub fn lowpass(sr: f32, hz: f32, q: f32) -> Biquad {
         let mut f = Biquad::blank(sr, q);
         f.set_lowpass(hz);
         f
     }
 
+    /// Highpass at `hz` (Hz) with quality factor `q`; same parameters and limits as
+    /// [`Biquad::lowpass`].
     pub fn highpass(sr: f32, hz: f32, q: f32) -> Biquad {
         let mut f = Biquad::blank(sr, q);
         f.set_highpass(hz);
         f
     }
 
-    /// Recompute lowpass coefficients (keeps state, no allocation).
+    /// Recompute lowpass coefficients for `hz` (Hz, clamped to [1, 0.49 * sr]); keeps state and
+    /// Q, no allocation. On a highpass-built filter this turns it into a lowpass.
     #[inline(always)]
     pub fn set_lowpass(&mut self, hz: f32) {
         let (c, alpha) = self.trig(hz);
@@ -58,12 +86,15 @@ impl Biquad {
         self.set_coeffs(b, 1.0 - c, b, 1.0 + alpha, -2.0 * c, 1.0 - alpha);
     }
 
+    /// Recompute highpass coefficients for `hz` (Hz, clamped to [1, 0.49 * sr]); keeps state
+    /// and Q, no allocation.
     pub fn set_highpass(&mut self, hz: f32) {
         let (c, alpha) = self.trig(hz);
         let b = (1.0 + c) * 0.5;
         self.set_coeffs(b, -(1.0 + c), b, 1.0 + alpha, -2.0 * c, 1.0 - alpha);
     }
 
+    /// Filters one sample.
     #[inline(always)]
     pub fn tick(&mut self, x: f32) -> f32 {
         let y = self.b0 * x + self.z1;

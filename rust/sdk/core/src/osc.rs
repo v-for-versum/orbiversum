@@ -1,4 +1,20 @@
 //! Oscillators: SawDPW, Pulse, SinOsc, LFTri.
+//!
+//! Audio-rate, one sample per `tick`. Each keeps a phase accumulator (and, for
+//! [`SawDpw`], one previous-square value); none allocates after construction and all
+//! are cheap (a few multiply-adds; `SinOsc` adds one [`crate::fast::sin`]). Phases
+//! advance by `hz / sr` per call and wrap by subtracting `floor`, so negative `hz` runs the
+//! phase backwards. Only [`SawDpw`] is band-limited; [`Pulse`] and [`LfTri`] are naive
+//! shapes and alias at high pitch.
+//!
+//! ```
+//! use orbiversum_core::osc::SawDpw;
+//!
+//! let mut saw = SawDpw::new(48_000.0);
+//! for _ in 0..1000 {
+//!     assert!(saw.tick(220.0).abs() <= 1.0);
+//! }
+//! ```
 
 use crate::fast::sin as sinf;
 
@@ -11,6 +27,13 @@ fn advance(phase: f32, inc: f32) -> f32 {
 }
 
 /// Band-limited saw (2nd-order DPW), output -1..1.
+///
+/// Algorithm: a bipolar phase `x` in [-1, 1) rises by `dx = 2 * |hz| / sr` per sample
+/// and wraps by subtracting 2. The output is the difference of the squared phase,
+/// `(x^2 - x_prev^2) / (2 * dx)`, clamped to [-1, 1]: the derivative of a parabola is a
+/// saw, and differencing a smooth parabola instead of the saw's jump limits aliasing.
+/// When `|hz|` is so low that `dx <= 1e-9` the oscillator is treated as stopped and
+/// outputs the raw phase `x`. The sign of `hz` is ignored (`abs`).
 pub struct SawDpw {
     inv_sr: f32,
     /// bipolar phase in [-1, 1)
@@ -25,6 +48,7 @@ pub struct SawDpw {
 }
 
 impl SawDpw {
+    /// Creates an oscillator for sample rate `sr` (Hz, must be > 0; not checked), phase 0.
     pub fn new(sr: f32) -> SawDpw {
         SawDpw { inv_sr: 1.0 / sr, x: 0.0, prev_sq: 0.0, hz_c: f32::NAN, dx: 0.0, inv_2dx: 0.0, flat: 0.0 }
     }
@@ -42,6 +66,9 @@ impl SawDpw {
         }
     }
 
+    /// One sample at pitch `hz` (Hz; `|hz|` above ~0.99 * sr is capped to `dx = 1.98`).
+    /// Equivalent to `set_hz(hz)` then [`SawDpw::tick_fixed`]; the coefficients are only
+    /// recomputed when `hz` differs from the previous call.
     #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         self.set_hz(hz);
@@ -61,17 +88,21 @@ impl SawDpw {
     }
 }
 
+/// Naive (not band-limited) pulse wave, output +1 or -1.
 pub struct Pulse {
     inv_sr: f32,
     phase: f32,
 }
 
 impl Pulse {
+    /// Creates an oscillator for sample rate `sr` (Hz, must be > 0; not checked), phase 0.
     pub fn new(sr: f32) -> Pulse {
         Pulse { inv_sr: 1.0 / sr, phase: 0.0 }
     }
 
-    /// `width` is the duty (0..1); output is +1 while phase < width, else -1.
+    /// One sample at `hz` (Hz). `width` is the duty (0..1); output is +1 while phase < width,
+    /// else -1. The phase is advanced first, then compared. `width` is not clamped: <= 0
+    /// gives a constant -1 and >= 1 a constant +1.
     #[inline(always)]
     pub fn tick(&mut self, hz: f32, width: f32) -> f32 {
         self.phase = advance(self.phase, hz * self.inv_sr);
@@ -81,17 +112,21 @@ impl Pulse {
     }
 }
 
+/// Sine oscillator: `sin(2 * pi * phase)` through [`crate::fast::sin`].
 pub struct SinOsc {
     inv_sr: f32,
     phase: f32,
 }
 
 impl SinOsc {
-    /// `phase` in cycles (0..1).
+    /// Creates an oscillator for sample rate `sr` (Hz, must be > 0; not checked).
+    /// `phase` is the starting phase in cycles; it is wrapped into [0, 1).
     pub fn new(sr: f32, phase: f32) -> SinOsc {
         SinOsc { inv_sr: 1.0 / sr, phase: phase - crate::fast::floor(phase) }
     }
 
+    /// One sample at `hz` (Hz). The output is taken from the phase *before* it advances, so the
+    /// first sample is `sin(2 * pi * start_phase)`.
     #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         let out = sinf(self.phase * TAU);
@@ -100,17 +135,22 @@ impl SinOsc {
     }
 }
 
-/// Naive triangle, -1..1.
+/// Naive (not band-limited) triangle, -1..1. Phase 0 is 0 and rising, 0.25 is +1,
+/// 0.75 is -1.
 pub struct LfTri {
     inv_sr: f32,
     phase: f32,
 }
 
 impl LfTri {
+    /// Creates an oscillator for sample rate `sr` (Hz, must be > 0; not checked).
+    /// `phase` is the starting phase in cycles; it is wrapped into [0, 1).
     pub fn new(sr: f32, phase: f32) -> LfTri {
         LfTri { inv_sr: 1.0 / sr, phase: phase - crate::fast::floor(phase) }
     }
 
+    /// One sample at `hz` (Hz); like [`SinOsc::tick`] the output uses the phase before the
+    /// advance.
     #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         let p = self.phase;

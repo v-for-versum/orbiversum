@@ -1,8 +1,15 @@
 //! Audio-rate noise: Noise2 (LFNoise2) and PinkNoise.
+//!
+//! Per-sample generators fed by an [`Rng`]; no allocation, cheap (a few multiply-adds and one
+//! random draw per sample).
 
 use crate::rng::Rng;
 
 /// Quadratic B-spline through random values in [-1, 1] drawn `hz` times per second (LFNoise2).
+///
+/// With the last three values `p0, p1, p2` and `t` the phase in [0, 1), `u = 1 - t`, the output is
+/// `0.5 * (u^2*p0 + (1 + 2t - 2t^2)*p1 + t^2*p2)`; the weights are non-negative and sum to 1, so
+/// the output stays within the range of the drawn values. At most one new value per call.
 pub struct Noise2 {
     rng: Rng,
     inv_sr: f32,
@@ -13,6 +20,8 @@ pub struct Noise2 {
 }
 
 impl Noise2 {
+    /// Creates the generator; `rng` supplies the values (three drawn now), `sr` is the sample
+    /// rate in Hz.
     pub fn new(mut rng: Rng, sr: f32) -> Noise2 {
         let p0 = rng.range(-1.0, 1.0);
         let p1 = rng.range(-1.0, 1.0);
@@ -20,6 +29,7 @@ impl Noise2 {
         Noise2 { rng, inv_sr: 1.0 / sr, phase: 0.0, p0, p1, p2 }
     }
 
+    /// Advances by `hz / sr` and returns one sample.
     #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         self.phase += hz * self.inv_sr;
@@ -36,6 +46,9 @@ impl Noise2 {
 }
 
 /// Paul Kellet "economy" pink noise filter on white noise.
+///
+/// White noise uniform in [-1, 1) goes through three one-poles (coefficients 0.99765, 0.963,
+/// 0.57) whose outputs are summed with a little of the white input and scaled by 0.2.
 pub struct PinkNoise {
     rng: Rng,
     b0: f32,
@@ -44,10 +57,12 @@ pub struct PinkNoise {
 }
 
 impl PinkNoise {
+    /// Creates the generator; `rng` supplies the white noise. Independent of the sample rate.
     pub fn new(rng: Rng) -> PinkNoise {
         PinkNoise { rng, b0: 0.0, b1: 0.0, b2: 0.0 }
     }
 
+    /// Returns the next pink-noise sample.
     #[inline(always)]
     pub fn tick(&mut self) -> f32 {
         let w = self.rng.range(-1.0, 1.0);

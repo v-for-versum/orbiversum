@@ -1,10 +1,26 @@
 //! Fast approximations for the audio hot path.
+//!
+//! Stateless, pure `f32` functions, all `#[inline(always)]`; usable at audio rate and at
+//! control rate. They never allocate and do not call libm (libm's `floorf` etc. live in
+//! flash, and its `sinf`/`expf` compute through f64, which is software float on the
+//! ESP32-S3). Cost class: a handful of multiply-adds each (`recip` three Newton steps,
+//! `tanh` one `recip_fast`, `sin`/`exp2` a short polynomial); none uses a hardware
+//! divide.
+//!
+//! ```
+//! use orbiversum_core::fast;
+//!
+//! assert!((fast::recip(4.0) - 0.25).abs() < 1e-5);
+//! assert!((fast::sin(1.0) - 1.0f32.sin()).abs() < 1e-5);
+//! assert_eq!(fast::floor(-2.5), -3.0);
+//! ```
 
 /// 1/d for d > 0 without a hardware divide (the ESP32-S3 FPU has none, so `/`
 /// is a software `__divsf3` call of ~100 cycles): bit-trick seed + 3 Newton steps.
 /// Measured relative error up to ~6.6e-6 on 0.001..1e8 (not 1e-7: the seed error
 /// is squared three times and f32 rounding adds to it); the test bound is 5e-7 on the
 /// product d * recip(d) over a narrower sweep, see `recip_is_accurate`.
+/// Not meant for d <= 0 or non-finite d (the bit-trick seed assumes a positive normal float).
 #[inline(always)]
 pub fn recip(d: f32) -> f32 {
     let mut y = f32::from_bits(0x7EF3_11C7u32.wrapping_sub(d.to_bits()));
@@ -15,7 +31,7 @@ pub fn recip(d: f32) -> f32 {
 }
 
 /// 1/d with ~2e-4 relative error (2 Newton steps): the shortest dependent chain
-/// that is still inaudible inside a saturator.
+/// that is still inaudible inside a saturator. Same domain as [`recip`] (d > 0).
 #[inline(always)]
 pub fn recip_fast(d: f32) -> f32 {
     let mut y = f32::from_bits(0x7EF3_11C7u32.wrapping_sub(d.to_bits()));
@@ -50,7 +66,8 @@ pub fn tanh(x: f32) -> f32 {
 }
 
 /// floor(x) for |x| < 2^31 without a libm call (libm's floorf lives in flash, which the
-/// audio path must not touch). Saturates outside that range.
+/// audio path must not touch). Saturates outside that range (the `as i32` cast saturates);
+/// NaN gives 0.0.
 #[inline(always)]
 pub fn floor(x: f32) -> f32 {
     let t = x as i32 as f32;
@@ -58,6 +75,10 @@ pub fn floor(x: f32) -> f32 {
 }
 
 /// sin(x), x in radians (any finite magnitude up to ~1e5 stays accurate to ~1e-5).
+///
+/// Reduces x to r in [-pi/2, pi/2] by subtracting n*pi (pi split into two constants for
+/// accuracy), evaluates an odd polynomial in r (terms up to r^11) and flips the sign
+/// for odd n.
 ///
 /// f32 only: libm's sinf/cosf/expf/powf compute through f64, which on the
 /// ESP32-S3 (no f64 FPU) becomes software float and costs microseconds per call.
@@ -78,6 +99,10 @@ pub fn sin(x: f32) -> f32 {
 
 /// (sin x, cos x) for x in [0, pi] (clamped), sharing one reduction; no float->int casts.
 /// Error ~1e-7. Used for filter coefficients and pan/crossfade shapes.
+///
+/// Folds x onto [0, pi/2], then evaluates the sine polynomial and a cosine Taylor
+/// polynomial; the cosine's sign is flipped when x was above pi/2. Input outside [0, pi]
+/// is clamped, not wrapped.
 #[inline(always)]
 pub fn sin_cos_0_pi(x: f32) -> (f32, f32) {
     let x = x.clamp(0.0, core::f32::consts::PI);
@@ -97,13 +122,16 @@ pub fn sin_cos_0_pi(x: f32) -> (f32, f32) {
     (s, c * (1.0 - 2.0 * hi))
 }
 
-/// cos(x), x in radians.
+/// cos(x), x in radians: `sin(x + pi/2)`, so same accuracy and cost as [`sin`].
 #[inline(always)]
 pub fn cos(x: f32) -> f32 {
     sin(x + core::f32::consts::FRAC_PI_2)
 }
 
-/// 2^x for x in about [-126, 126] (clamped); relative error < 1e-5.
+/// 2^x for x clamped to [-126, 126]; relative error < 1e-5.
+///
+/// Splits x into integer part n (via [`floor`]) and fraction f in [0, 1), evaluates a
+/// degree-6 polynomial for 2^f and scales it by 2^n through the float exponent bits.
 #[inline(always)]
 pub fn exp2(x: f32) -> f32 {
     let x = x.clamp(-126.0, 126.0);
@@ -116,7 +144,7 @@ pub fn exp2(x: f32) -> f32 {
     p * f32::from_bits(((n as i32 + 127) as u32) << 23)
 }
 
-/// e^x via `exp2`.
+/// e^x as `exp2(x * log2(e))`; same clamp (x*log2(e) in [-126, 126]) and accuracy as [`exp2`].
 #[inline(always)]
 pub fn exp(x: f32) -> f32 {
     exp2(x * core::f32::consts::LOG2_E)

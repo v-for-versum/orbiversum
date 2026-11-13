@@ -1,10 +1,19 @@
 //! SC-style RLPF and Ringz resonant filters.
+//!
+//! Audio rate, per-sample `tick` is a handful of multiply-adds on two stored outputs
+//! (`y1`, `y2`); no allocation. `set` is control rate (it needs several reciprocals and
+//! sine/cosine evaluations) and keeps the state. Both clamp the frequency to
+//! [10, 0.45 * sr] Hz and map NaN parameters to a safe default.
 
 use crate::fast::{exp, recip, sin_cos_0_pi};
 
 const TWO_PI: f32 = 2.0 * core::f32::consts::PI;
 
 /// SC RLPF: two-pole resonant lowpass.
+///
+/// Coefficients, with `pf = 2*pi*hz/sr` and `d = tan(pf*rq/2)`: `c = (1-d)/(1+d)`,
+/// `b1 = (1+c)*cos(pf)`, `b2 = -c`, `a0 = (1+c-b1)/4`. Per sample:
+/// `y0 = a0*x + b1*y1 + b2*y2; out = y0 + 2*y1 + y2`.
 pub struct RLpf {
     sr: f32,
     a0: f32,
@@ -15,13 +24,16 @@ pub struct RLpf {
 }
 
 impl RLpf {
+    /// Creates the filter for sample rate `sr` (Hz), initially at 1000 Hz, `rq` = 1.
     pub fn new(sr: f32) -> RLpf {
         let mut f = RLpf { sr, a0: 0.0, b1: 0.0, b2: 0.0, y1: 0.0, y2: 0.0 };
         f.set(1000.0, 1.0);
         f
     }
 
-    /// Control rate; keeps state.
+    /// Sets cutoff `hz` (Hz, clamped to [10, 0.45 * sr], NaN -> 10) and `rq`, the reciprocal of Q
+    /// (1 = Q of 1; smaller = more resonance; floored at 0.001, NaN -> 1). Control rate;
+    /// keeps state.
     pub fn set(&mut self, hz: f32, rq: f32) {
         let hz = if hz.is_nan() { 10.0 } else { hz.clamp(10.0, self.sr * 0.45) };
         let qres = if rq.is_nan() { 1.0 } else { rq.max(0.001) };
@@ -36,6 +48,7 @@ impl RLpf {
         self.a0 = (1.0 + c - self.b1) * 0.25;
     }
 
+    /// Filters one sample.
     #[inline(always)]
     pub fn tick(&mut self, x: f32) -> f32 {
         let y0 = self.a0 * x + self.b1 * self.y1 + self.b2 * self.y2;
@@ -47,6 +60,12 @@ impl RLpf {
 }
 
 /// SC Ringz: resonator with a decay time (ring to -60 dB).
+///
+/// A two-pole resonator with pole radius `r = exp(-ln(1000) / (decay * sr))`, so an impulse
+/// rings down by 60 dB (a factor of 1000 in amplitude) after `decay` seconds. With
+/// `c = cos(2*pi*hz/sr)`: `b1 = 2*r*c`, `b2 = -r^2`; per sample
+/// `y0 = x + b1*y1 + b2*y2; out = 0.5*(y0 - y2)`. The gain is not normalised: it grows with
+/// `decay`.
 pub struct Ringz {
     sr: f32,
     b1: f32,
@@ -56,13 +75,15 @@ pub struct Ringz {
 }
 
 impl Ringz {
+    /// Creates the resonator for sample rate `sr` (Hz), initially 440 Hz, 1 s decay.
     pub fn new(sr: f32) -> Ringz {
         let mut f = Ringz { sr, b1: 0.0, b2: 0.0, y1: 0.0, y2: 0.0 };
         f.set(440.0, 1.0);
         f
     }
 
-    /// Control rate; keeps state.
+    /// Sets resonant frequency `hz` (Hz, clamped to [10, 0.45 * sr], NaN -> 10) and `decay_s`
+    /// (seconds to -60 dB; floored at 0.01, NaN -> 0.01). Control rate; keeps state.
     pub fn set(&mut self, hz: f32, decay_s: f32) {
         let hz = if hz.is_nan() { 10.0 } else { hz.clamp(10.0, self.sr * 0.45) };
         let decay = if decay_s.is_nan() { 0.01 } else { decay_s.max(0.01) };
@@ -72,6 +93,7 @@ impl Ringz {
         self.b2 = -r * r;
     }
 
+    /// Filters one sample.
     #[inline(always)]
     pub fn tick(&mut self, x: f32) -> f32 {
         let y0 = x + self.b1 * self.y1 + self.b2 * self.y2;

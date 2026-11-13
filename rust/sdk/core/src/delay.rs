@@ -1,8 +1,28 @@
 //! Delay line with cubic (Catmull-Rom) interpolation, like SC DelayC.
+//!
+//! Audio rate. A power-of-two `f32` ring buffer is allocated once in `new` (length >=
+//! `max_s * sr + 4` samples); `tick`/`tick_fixed` do no allocation and no bounds checks
+//! and cost four loads plus about a dozen multiply-adds, with no divide. The delay is at
+//! least 1 sample.
+//!
+//! ```
+//! use orbiversum_core::delay::DelayC;
+//!
+//! let mut d = DelayC::new(1000.0, 0.01); // up to 10 ms at 1 kHz
+//! d.set_delay(0.003); // 3 samples
+//! let out: Vec<f32> = [1.0, 0.0, 0.0, 0.0, 0.0].iter().map(|&x| d.tick_fixed(x)).collect();
+//! assert_eq!(out, [0.0, 0.0, 0.0, 1.0, 0.0]);
+//! ```
 
 use alloc::vec;
 use alloc::vec::Vec;
 
+/// Delay line with cubic (Catmull-Rom) interpolation (SC DelayC).
+///
+/// With the delay `k + f` samples (`k` integer >= 1, `f` in [0, 1)) and the four taps
+/// `y0..y3` at `k-1 .. k+2` samples back, the output is the Catmull-Rom cubic
+/// `y1 + 0.5*f*((y2-y0) + f*((2*y0 - 5*y1 + 4*y2 - y3) + f*(3*(y1-y2) + y3 - y0)))`, which
+/// passes through `y1` at `f = 0` and `y2` at `f = 1`.
 pub struct DelayC {
     sr: f32,
     buf: Vec<f32>,
@@ -18,7 +38,8 @@ pub struct DelayC {
 }
 
 impl DelayC {
-    /// Allocates the buffer once; `tick` never allocates.
+    /// Allocates the buffer once; `tick` never allocates. `sr` is in Hz, `max_s` is the largest
+    /// delay in seconds (longer requests are clamped). The initial delay is 1 sample.
     pub fn new(sr: f32, max_s: f32) -> DelayC {
         let need = (max_s * sr) as usize + 4;
         let len = need.next_power_of_two();
@@ -30,7 +51,10 @@ impl DelayC {
         self.buf.as_ptr().cast()
     }
 
-    /// Sets the delay time; call when it changes (control rate), then use `tick_fixed`.
+    /// Sets the delay time `delay_s` in seconds; call when it changes (control rate), then use
+    /// `tick_fixed`. Clamped to [1 sample, max]; a delay within 1e-3 sample of a whole
+    /// number snaps to it. Nothing is recomputed if the value equals the previous one.
+    /// NaN is not handled here (unlike [`crate::comb::DelayL::set_delay`]); pass a finite value.
     #[inline(always)]
     pub fn set_delay(&mut self, delay_s: f32) {
         if delay_s != self.delay_c {
@@ -46,14 +70,15 @@ impl DelayC {
         }
     }
 
+    /// Sets the delay (see [`DelayC::set_delay`]) and processes one sample `x`.
     #[inline(always)]
     pub fn tick(&mut self, x: f32, delay_s: f32) -> f32 {
         self.set_delay(delay_s);
         self.tick_fixed(x)
     }
 
-    /// Sample at the delay set by `set_delay`. No branches or bounds checks, so
-    /// several lines can be interleaved by the compiler.
+    /// Stores `x` and returns the sample at the delay set by `set_delay`. No branches or bounds
+    /// checks, so several lines can be interleaved by the compiler.
     #[inline(always)]
     pub fn tick_fixed(&mut self, x: f32) -> f32 {
         let (k, f, mask, w) = (self.k, self.f, self.mask, self.w);

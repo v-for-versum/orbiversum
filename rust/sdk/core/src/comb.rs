@@ -1,8 +1,28 @@
 //! Linearly interpolated delay line and feedback comb, like SC DelayL / CombL.
+//!
+//! Audio rate. Both own a power-of-two ring buffer of `f32` allocated once in `new`
+//! (length >= `max_s * sr + 4` samples, so up to twice that); `tick`/`tick_fixed` do no
+//! allocation, no bounds checks and one linear interpolation (two loads, a multiply-add).
+//! The delay is at least 1 sample. Delay time changes are control rate (`set_delay`,
+//! `set`); the read position is not smoothed, so large jumps click.
+//!
+//! ```
+//! use orbiversum_core::comb::DelayL;
+//!
+//! let mut d = DelayL::new(1000.0, 0.01); // up to 10 ms at 1 kHz
+//! d.set_delay(0.003); // 3 samples
+//! let out: Vec<f32> = [1.0, 0.0, 0.0, 0.0, 0.0].iter().map(|&x| d.tick_fixed(x)).collect();
+//! assert_eq!(out, [0.0, 0.0, 0.0, 1.0, 0.0]);
+//! ```
 
 use alloc::vec;
 use alloc::vec::Vec;
 
+/// Delay line with linear interpolation (SC DelayL).
+///
+/// The output for input `x[t]` is the interpolation `a + f * (b - a)` between the samples
+/// `k` and `k + 1` steps back, where `k + f` is the delay in samples. Memory: a
+/// power-of-two `Vec<f32>` allocated in [`DelayL::new`].
 pub struct DelayL {
     sr: f32,
     buf: Vec<f32>,
@@ -16,7 +36,9 @@ pub struct DelayL {
 }
 
 impl DelayL {
-    /// Allocates the buffer once; `tick_fixed` never allocates.
+    /// Allocates the buffer once; `tick_fixed` never allocates. `sr` is in Hz, `max_s` is the
+    /// largest delay in seconds that `set_delay` will honour (longer requests are clamped).
+    /// The initial delay is 1 sample.
     pub fn new(sr: f32, max_s: f32) -> DelayL {
         let need = (max_s * sr) as usize + 4;
         let len = need.next_power_of_two();
@@ -28,8 +50,9 @@ impl DelayL {
         self.buf.as_ptr().cast()
     }
 
-    /// Sets the delay time (clamped to [1, max] samples); control rate.
-    /// Returns the effective delay in seconds.
+    /// Sets the delay time `s` in seconds, clamped to [1 sample, max] (NaN -> 1 sample); control
+    /// rate. A delay within 1e-3 sample of a whole number snaps to it, so integer delays are
+    /// exact. Returns the effective delay in seconds.
     pub fn set_delay(&mut self, s: f32) -> f32 {
         let mut d = (s * self.sr).clamp(1.0, self.max_d);
         if d.is_nan() {
@@ -63,7 +86,8 @@ impl DelayL {
         self.w = (self.w + 1) & self.mask;
     }
 
-    /// Sample at the delay set by `set_delay`, linear interpolation.
+    /// Reads the sample delayed by the time set with [`DelayL::set_delay`] (linear interpolation),
+    /// then stores `x`. The read happens before the write.
     #[inline(always)]
     pub fn tick_fixed(&mut self, x: f32) -> f32 {
         let y = self.read();
@@ -73,27 +97,38 @@ impl DelayL {
 }
 
 /// Feedback comb: returns the delayed value `d`, writes `x + fb * d`.
+///
+/// `fb` is derived from the decay time so that the echoes fall by 60 dB over `decay_s`
+/// (see [`CombL::set`]). Since `fb <= 1` it is always stable.
 pub struct CombL {
     line: DelayL,
     fb: f32,
 }
 
 impl CombL {
+    /// Allocates the delay buffer (see [`DelayL::new`]); `sr` in Hz, `max_s` the largest delay
+    /// in seconds. Starts with `fb` = 0 (no feedback) and a 1-sample delay.
     pub fn new(sr: f32, max_s: f32) -> CombL {
         CombL { line: DelayL::new(sr, max_s), fb: 0.0 }
     }
 
+    /// Start address of the sample buffer (for memory-placement diagnostics).
     pub fn buf_ptr(&self) -> *const u8 {
         self.line.buf_ptr()
     }
 
-    /// Control rate; keeps state. `fb` gives -60 dB after `decay_s`.
+    /// Sets the delay `delay_s` (seconds, clamped as in [`DelayL::set_delay`]) and the decay
+    /// `decay_s` (seconds to -60 dB; floored at 0.01, NaN -> 0.01). Control rate; keeps state.
+    ///
+    /// The feedback gain is `fb = 2^(-log2(1000) * delay / decay)`, using the effective delay,
+    /// so `fb^(decay / delay) = 0.001`.
     pub fn set(&mut self, delay_s: f32, decay_s: f32) {
         let eff = self.line.set_delay(delay_s);
         let decay = if decay_s.is_nan() { 0.01 } else { decay_s.max(0.01) };
         self.fb = crate::fast::exp2(-9.965_784 * eff * crate::fast::recip(decay));
     }
 
+    /// Processes one sample: returns the delayed value `d` and stores `x + fb * d`.
     #[inline(always)]
     pub fn tick(&mut self, x: f32) -> f32 {
         let d = self.line.read();

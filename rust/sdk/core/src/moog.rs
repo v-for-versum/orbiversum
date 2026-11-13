@@ -1,8 +1,25 @@
 //! Moog ladder filter, Huovilainen model (approximation of SC MoogLadder).
+//!
+//! Audio rate; one of the most expensive blocks of the crate. Each ladder iteration runs four
+//! one-pole stages with a [`crate::fast::tanh_cheap`] saturator on the input and after each
+//! stage (five `tanh_cheap`, each with a reciprocal, per pass), plus feedback from the
+//! last stage. State per channel: four stage values, their cached `tanh`, and the smoothed
+//! feedback `last`; no allocation. The cutoff-dependent coefficients are cached and only
+//! recomputed (including one [`crate::fast::exp`]) when `cutoff_hz` differs from the
+//! previous call.
+//!
+//! Algorithm per pass, with `fc = clamp(cutoff/sr, 0.0005, 0.45)`:
+//! `tune = 1 - exp(-2*pi * (fc/passes) * fcr(fc))` (`fcr` and `acr` are cubic/quadratic
+//! polynomials in `fc` fitted for tuning and resonance compensation, as in the code);
+//! `u = tanh(x - res*acr*last)`; for each stage `k`: `s[k] += tune * (prev - tanh(s[k]))`,
+//! `prev = tanh(s[k])` (starting from `prev = u`); then `last = 0.5 * (s[3] + last)`. The
+//! output is `s[3]`.
 
 use crate::fast::tanh_cheap as tanh;
 use crate::fast::exp as expf;
 
+/// Mono Moog ladder lowpass (4 poles). With `passes` = 2 each `tick` runs the ladder twice
+/// on the same input; with 1 it runs once (cheaper).
 pub struct MoogLadder {
     inv_sr: f32,
     inv_passes: f32,
@@ -19,18 +36,20 @@ pub struct MoogLadder {
 }
 
 impl MoogLadder {
+    /// Creates a ladder for sample rate `sr` (Hz) with 2 passes per tick.
     pub fn new(sr: f32) -> MoogLadder {
         MoogLadder::with_oversample(sr, 2)
     }
 
-    /// `passes` ladder iterations per tick (1 = no oversampling, cheaper).
+    /// `passes` ladder iterations per tick (1 = no oversampling, cheaper); clamped to 1..=2.
     pub fn with_oversample(sr: f32, passes: usize) -> MoogLadder {
         let passes = passes.clamp(1, 2);
         MoogLadder { inv_sr: 1.0 / sr, inv_passes: 1.0 / passes as f32, passes, s: [0.0; 4], last: 0.0, ts: [0.0; 4], cached_cutoff: f32::NAN, tune: 0.0, acr: 0.0 }
     }
 
-    /// `res` 0..4; clamped to 3.8 so the ladder always rings out instead of
-    /// self-oscillating (the Huovilainen feedback gain is ~4 at oscillation).
+    /// Filters one sample `x`. `cutoff_hz` is in Hz (internally clamped to
+    /// [0.0005, 0.45] * sr). `res` 0..4; clamped to [0, 3.8] so the ladder always rings out
+    /// instead of self-oscillating (the Huovilainen feedback gain is ~4 at oscillation).
     #[inline(always)]
     pub fn tick(&mut self, x: f32, cutoff_hz: f32, res: f32) -> f32 {
         if cutoff_hz != self.cached_cutoff {
@@ -62,18 +81,18 @@ impl MoogLadder {
     }
 }
 
-/// Production configuration (Starlids): ONE ladder pass per sample, not the 2x
-/// oversampling of the norns original, and a single input saturation tanh(x) (the old
-/// pipeline applied tanh twice: tanh outside, tanh inside). Both are deliberate: the
-/// real-time budget on the ESP32-S3 did not allow more; see
-/// `dsp/tests/starlids_ref.rs` for the audible cost (within the golden tolerances).
-///
 /// Two MoogLadders with a shared cutoff, processed in lock step.
 ///
 /// Bit-identical to two `MoogLadder`s; the point is instruction-level
 /// parallelism: each ladder is a serial chain of dependent FPU ops (tanh ->
 /// stage -> tanh ...), and the in-order S3 core stalls on every one, so
 /// interleaving the two independent channels fills those stalls.
+///
+/// Production configuration (Starlids): ONE ladder pass per sample, not the 2x
+/// oversampling of the norns original, and a single input saturation tanh(x) (the old
+/// pipeline applied tanh twice: tanh outside, tanh inside). Both are deliberate: the
+/// real-time budget on the ESP32-S3 did not allow more; see
+/// `dsp/tests/starlids_ref.rs` for the audible cost (within the golden tolerances).
 pub struct MoogStereo {
     inv_sr: f32,
     inv_passes: f32,
@@ -87,6 +106,8 @@ pub struct MoogStereo {
 }
 
 impl MoogStereo {
+    /// Creates a stereo ladder for sample rate `sr` (Hz) with `passes` ladder iterations per
+    /// tick, clamped to 1..=2.
     pub fn with_oversample(sr: f32, passes: usize) -> MoogStereo {
         let passes = passes.clamp(1, 2);
         MoogStereo {
@@ -102,6 +123,8 @@ impl MoogStereo {
         }
     }
 
+    /// Filters one stereo frame `x` with the shared `cutoff_hz` (Hz) and `res` (0..4, clamped
+    /// to [0, 3.8], as in [`MoogLadder::tick`]).
     #[inline(always)]
     pub fn tick(&mut self, x: [f32; 2], cutoff_hz: f32, res: f32) -> [f32; 2] {
         if cutoff_hz != self.cached_cutoff {

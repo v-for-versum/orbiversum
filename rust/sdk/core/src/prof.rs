@@ -4,17 +4,41 @@
 //! sections (a handful of reads per block, never per sample), accumulate in
 //! locals and publish once per block. A UI thread reads and resets the totals
 //! with `take`.
+//!
+//! Audio-thread cost per block: two clock reads per `mark` plus about a dozen relaxed atomic
+//! operations in `Block::finish`; on non-Xtensa targets without an installed clock
+//! `finish` returns immediately. Everything is static: no allocation, no locks. The state is
+//! global, so there is one profile per process.
+//!
+//! ```
+//! use orbiversum_core::prof;
+//!
+//! // Without a clock the host build records nothing.
+//! let mut b = prof::Block::start();
+//! b.mark(prof::SAW);
+//! b.finish();
+//! assert_eq!(prof::now(), 0);
+//! ```
 
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
+/// Number of timing sections.
 pub const SECTIONS: usize = 8;
+/// Section index: control-rate work.
 pub const CONTROL: usize = 0;
+/// Section index: sawtooth oscillators.
 pub const SAW: usize = 1;
+/// Section index: lowpass filters.
 pub const LPF: usize = 2;
+/// Section index: delay lines.
 pub const DELAY: usize = 3;
+/// Section index: mixing.
 pub const MIX: usize = 4;
+/// Section index: Moog ladder.
 pub const MOOG: usize = 5;
+/// Section index: highpass filters.
 pub const HPF: usize = 6;
+/// Section index: everything else (sub oscillator and other).
 pub const OTHER: usize = 7;
 /// Section names, same order as the totals.
 pub const NAMES: [&str; SECTIONS] = ["control", "saw", "lpf", "delay", "mix", "moog", "hpf", "sub+other"];
@@ -49,10 +73,12 @@ pub const NOTES: usize = 4;
 static ADDRS: [AtomicUsize; NOTES] = [const { AtomicUsize::new(0) }; NOTES];
 
 /// Remembers where a buffer lives so the firmware can report internal RAM vs PSRAM.
+/// `slot` must be < [`NOTES`] (panics otherwise).
 pub fn note_addr(slot: usize, ptr: *const u8) {
     ADDRS[slot].store(ptr as usize, Ordering::Relaxed);
 }
 
+/// The addresses stored by [`note_addr`], one per slot (0 = not set).
 pub fn addrs() -> [usize; NOTES] {
     let mut o = [0; NOTES];
     for (a, s) in o.iter_mut().zip(ADDRS.iter()) {
@@ -70,7 +96,7 @@ pub fn take_worst() -> (u32, [u32; SECTIONS]) {
     (WORST_TOTAL.swap(0, Ordering::Relaxed), o)
 }
 
-/// Installs a monotonic tick source (wrapping u32).
+/// Installs a monotonic tick source (wrapping u32), used by [`now`] on targets other than Xtensa.
 pub fn set_clock(f: fn() -> u32) {
     CLOCK.store(f as usize, Ordering::Relaxed);
 }
@@ -107,12 +133,14 @@ pub struct Block {
 }
 
 impl Block {
+    /// Starts a block: all sections at zero, clock read now.
     #[inline]
     pub fn start() -> Block {
         Block { acc: [0; SECTIONS], t: now() }
     }
 
-    /// Charges the time since the previous `mark` to `section`.
+    /// Charges the time since the previous `mark` (or `start`) to `section` (an index < [`SECTIONS`],
+    /// e.g. [`SAW`]; panics otherwise). Wrapping `u32` ticks.
     #[inline]
     pub fn mark(&mut self, section: usize) {
         let n = now();
@@ -120,6 +148,9 @@ impl Block {
         self.t = n;
     }
 
+    /// Publishes this block: adds the per-section ticks to the totals read by [`take`], counts the
+    /// block, and records it as the worst block if its total is the largest since the last
+    /// [`take_worst`]. Does nothing on non-Xtensa targets until [`set_clock`] was called.
     pub fn finish(self) {
         #[cfg(not(target_arch = "xtensa"))]
         if CLOCK.load(Ordering::Relaxed) == 0 {

@@ -1,9 +1,17 @@
 //! Slow control-rate-style generators: Noise0, Noise1, VarLagSine.
+//!
+//! These modulate parameters rather than make sound. They have no sample-rate assumption of
+//! their own: each `tick` advances by `hz / sr` (or `1 / (time_s * sr)`) for the `sr` given
+//! to the constructor, so call them once per audio sample with the audio `sr`, or once per
+//! control step with the control rate as `sr`. Cheap, no allocation; random values come
+//! from the [`Rng`] passed in.
 
 use crate::rng::Rng;
 use crate::fast::{self, sin_cos_0_pi};
 
 /// Stepped random (LFNoise0): new value in -1..1 `hz` times per second.
+///
+/// At most one new value per call, so `hz >= sr` just gives a new value every call.
 pub struct Noise0 {
     rng: Rng,
     inv_sr: f32,
@@ -12,11 +20,14 @@ pub struct Noise0 {
 }
 
 impl Noise0 {
+    /// Creates the generator; `rng` supplies the values (and draws the first one now), `sr` is the
+    /// rate (Hz) at which `tick` will be called.
     pub fn new(mut rng: Rng, sr: f32) -> Noise0 {
         let value = rng.range(-1.0, 1.0);
         Noise0 { rng, inv_sr: 1.0 / sr, phase: 0.0, value }
     }
 
+    /// Advances by `hz / sr` and returns the held value (in [-1, 1)).
     #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         self.phase += hz * self.inv_sr;
@@ -28,7 +39,8 @@ impl Noise0 {
     }
 }
 
-/// Linearly interpolated random (LFNoise1).
+/// Linearly interpolated random (LFNoise1): a straight line between successive random
+/// values in [-1, 1), one new target `hz` times per second.
 pub struct Noise1 {
     rng: Rng,
     inv_sr: f32,
@@ -38,12 +50,15 @@ pub struct Noise1 {
 }
 
 impl Noise1 {
+    /// Creates the generator; `rng` supplies the values (two drawn now), `sr` is the rate (Hz)
+    /// at which `tick` will be called.
     pub fn new(mut rng: Rng, sr: f32) -> Noise1 {
         let from = rng.range(-1.0, 1.0);
         let to = rng.range(-1.0, 1.0);
         Noise1 { rng, inv_sr: 1.0 / sr, phase: 0.0, from, to }
     }
 
+    /// Advances by `hz / sr` and returns the interpolated value (in [-1, 1)).
     #[inline(always)]
     pub fn tick(&mut self, hz: f32) -> f32 {
         self.phase += hz * self.inv_sr;
@@ -57,7 +72,8 @@ impl Noise1 {
 }
 
 /// Smooths toward `target` over `time_s` along a sine (raised-cosine) curve.
-/// A target change restarts the ramp from the current value.
+/// A target change restarts the ramp from the current value. The weight along the ramp is
+/// `0.5 - 0.5 * cos(pi * pos)` with `pos` going 0 to 1.
 pub struct VarLagSine {
     sr: f32,
     start: f32,
@@ -68,10 +84,15 @@ pub struct VarLagSine {
 }
 
 impl VarLagSine {
+    /// Creates the smoother for rate `sr` (Hz). The first `tick` adopts its target directly
+    /// (no ramp from 0).
     pub fn new(sr: f32) -> VarLagSine {
         VarLagSine { sr, start: 0.0, target: 0.0, pos: 1.0, value: 0.0, primed: false }
     }
 
+    /// Returns the smoothed value moving towards `target`; a ramp takes `time_s` seconds
+    /// (<= 0 jumps to the target on the next call). `time_s` is read every call, so changing it
+    /// during a ramp changes the speed of the remainder.
     #[inline(always)]
     pub fn tick(&mut self, target: f32, time_s: f32) -> f32 {
         if !self.primed {

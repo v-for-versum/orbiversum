@@ -1,6 +1,25 @@
 //! Lightweight Freeverb (as SC FreeVerb): per channel 4 lowpass-feedback combs
 //! in parallel, then 2 allpasses in series. Channels are independent.
 //! Buffers have exact lengths and indices wrap by compare (no modulo, no division in `tick`).
+//!
+//! Audio rate. State: 12 `f32` buffers (per channel 4 combs + 2 allpasses) and one
+//! damping value per comb, all allocated in [`ReverbLite::new`]; `tick` never allocates.
+//! The reference delay lengths are 1116, 1277, 1422, 1557 (combs) and 556, 341 (allpasses)
+//! samples at 44.1 kHz, scaled linearly to the actual `sr` (minimum 2 samples); both channels
+//! use the same lengths. Parameters are fixed at construction. Cost class: moderate (about 12
+//! buffer reads and writes and a few multiply-adds per channel per sample).
+//!
+//! ```
+//! use orbiversum_core::reverb::ReverbLite;
+//!
+//! let mut rv = ReverbLite::new(48_000.0, 0.3, 0.8, 0.5);
+//! let mut out = [0.0f32; 2];
+//! for i in 0..2000 {
+//!     out = rv.tick(if i == 0 { 1.0 } else { 0.0 }, 0.0);
+//! }
+//! assert!(out[0].is_finite() && out[1].is_finite());
+//! assert!(rv.mem_bytes() > 0);
+//! ```
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -105,6 +124,13 @@ impl Channel {
     }
 }
 
+/// Stereo Freeverb-style reverb (SC FreeVerb): per channel, the input scaled by 0.015 feeds
+/// four parallel lowpass-feedback combs whose sum goes through two series allpasses.
+///
+/// Comb: `out = buf[i]; store = out*(1-d1) + store*d1; buf[i] = x + store*fb`, with
+/// damping `d1 = damp * 0.4` and feedback `fb = room * 0.28 + 0.7`. Allpass (feedback 0.5):
+/// `b = buf[i]; buf[i] = x + 0.5*b; out = b - x`. The output is the dry/wet crossfade
+/// `in*(1-mix) + wet*mix`.
 pub struct ReverbLite {
     ch: [Channel; 2],
     mix: f32,
@@ -114,7 +140,9 @@ pub struct ReverbLite {
 }
 
 impl ReverbLite {
-    /// Allocates all buffers; `tick` never allocates. `room` and `damp` are clamped to [0, 1].
+    /// Allocates all buffers; `tick` never allocates. `sr` is in Hz. `mix` (dry/wet, 0 = dry),
+    /// `room` (0..1, longer tail as it grows) and `damp` (0..1, more high-frequency loss as it
+    /// grows) are each clamped to [0, 1], NaN -> 0.
     pub fn new(sr: f32, mix: f32, room: f32, damp: f32) -> ReverbLite {
         let room = if room.is_nan() { 0.0 } else { room.clamp(0.0, 1.0) };
         let damp = if damp.is_nan() { 0.0 } else { damp.clamp(0.0, 1.0) };
@@ -133,6 +161,8 @@ impl ReverbLite {
         self.ch[0].mem_bytes() + self.ch[1].mem_bytes()
     }
 
+    /// Processes one stereo frame (`l`, `r`) and returns `[left, right]`; the channels do not
+    /// mix with each other.
     #[inline(always)]
     pub fn tick(&mut self, l: f32, r: f32) -> [f32; 2] {
         let (fb, d1, d2, m) = (self.fb, self.d1, self.d2, self.mix);

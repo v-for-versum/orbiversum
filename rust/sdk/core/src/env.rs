@@ -1,8 +1,27 @@
 //! Envelopes: Decay2 (audio rate) and EnvPerc (control rate).
+//!
+//! Neither allocates. [`Decay2`] keeps two one-pole states and costs two multiply-adds per
+//! sample. [`EnvPerc`] keeps a time and an active flag and is driven by a time step per
+//! call (`dt` seconds), typically once per control block; its curved segments use one
+//! [`crate::fast::exp`] per call.
+//!
+//! ```
+//! use orbiversum_core::env::EnvPerc;
+//!
+//! let mut e = EnvPerc::new(0.01, 1.0, 1.0, 0.0); // linear attack/release
+//! assert_eq!(e.tick(0.1), 0.0); // idle until triggered
+//! e.trigger();
+//! let peak = e.tick(0.01); // end of the 10 ms attack
+//! assert!((peak - 1.0).abs() < 1e-5);
+//! ```
 
 use crate::fast;
 
 /// SC Decay2: `Decay(x, decay) - Decay(x, attack)`, each a one-pole `y = x + coef * y_prev`.
+///
+/// With `coef = exp(-1 / (sr * t))` for a time `t > 0` and `coef = 0` for `t <= 0`
+/// (that branch is then a plain copy of `x`). Fed with an impulse, the output rises over
+/// `attack_s` and falls over `decay_s`. The gain is not normalised.
 pub struct Decay2 {
     ca: f32,
     cd: f32,
@@ -11,11 +30,14 @@ pub struct Decay2 {
 }
 
 impl Decay2 {
+    /// Creates the envelope for sample rate `sr` (Hz) with `attack_s` and `decay_s` in seconds
+    /// (the time constants of the two one-poles; `<= 0` disables that pole).
     pub fn new(sr: f32, attack_s: f32, decay_s: f32) -> Decay2 {
         let coef = |t: f32| if t > 0.0 { libm::expf(-1.0 / (sr * t)) } else { 0.0 };
         Decay2 { ca: coef(attack_s), cd: coef(decay_s), ya: 0.0, yd: 0.0 }
     }
 
+    /// Processes one input sample (normally a trigger impulse) and returns the envelope.
     #[inline(always)]
     pub fn tick(&mut self, x: f32) -> f32 {
         self.yd = x + self.cd * self.yd;
@@ -24,7 +46,16 @@ impl Decay2 {
     }
 }
 
-/// SC Env.perc-style envelope: linear attack to `level`, curved release to 0.
+/// SC Env.perc-style envelope: attack to `level`, release to 0, both shaped by `curve`.
+///
+/// With `u` the progress through a segment and `shape(u) = (1 - e^(curve*u)) / (1 - e^curve)`
+/// (or `u` when `|1 - e^curve| <= 1e-4`, i.e. `curve` near 0), the attack is
+/// `level * shape(t / attack_s)` and the release is `level * (1 - shape(u))` over
+/// `release_s`. Like SC's `Env.perc` the same `curve` applies to both segments. After the
+/// release it returns to idle and outputs 0.
+///
+/// `release_s` must be > 0: with `release_s <= 0` the release progress never advances and the
+/// output stays at `level`. `attack_s <= 0` skips the attack.
 pub struct EnvPerc {
     attack_s: f32,
     inv_attack: f32,
@@ -38,6 +69,8 @@ pub struct EnvPerc {
 }
 
 impl EnvPerc {
+    /// Creates an idle envelope. `attack_s` and `release_s` are in seconds, `level` is the
+    /// linear peak gain, `curve` the shape parameter described on the type.
     pub fn new(attack_s: f32, release_s: f32, level: f32, curve: f32) -> EnvPerc {
         let den = 1.0 - fast::exp(curve);
         EnvPerc {
@@ -52,11 +85,13 @@ impl EnvPerc {
         }
     }
 
+    /// Starts (or restarts) the envelope from t = 0.
     pub fn trigger(&mut self) {
         self.t = 0.0;
         self.active = true;
     }
 
+    /// Advances the envelope by `dt` seconds and returns its value; 0 while idle.
     #[inline(always)]
     pub fn tick(&mut self, dt: f32) -> f32 {
         if !self.active {

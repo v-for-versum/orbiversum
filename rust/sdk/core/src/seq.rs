@@ -1,5 +1,21 @@
 //! Control-rate sequencing helpers: Dust, Impulse, Dseq, Dxrand, TChoose, TDelay.
 //! `dt` is seconds per control step. No allocation in any `tick`/`next`.
+//!
+//! All are cheap (a comparison or one random draw per call) and are called once per control
+//! step, not per sample. The ones that draw random numbers take an [`Rng`] at construction.
+//!
+//! ```
+//! use orbiversum_core::seq::{Dseq, Impulse};
+//!
+//! let mut imp = Impulse::new();
+//! let fired: Vec<bool> = (0..5).map(|_| imp.tick(10.0, 0.05)).collect(); // 10 Hz, 50 ms steps
+//! assert_eq!(fired, [true, false, true, false, true]);
+//!
+//! let mut seq = Dseq::new();
+//! let notes = [0i8, 3, 7];
+//! let picked: Vec<i8> = (0..4).map(|_| seq.next(&notes)).collect();
+//! assert_eq!(picked, [0, 3, 7, 0]);
+//! ```
 
 use crate::rng::Rng;
 
@@ -9,10 +25,13 @@ pub struct Dust {
 }
 
 impl Dust {
+    /// Creates the trigger; `rng` supplies the random numbers.
     pub fn new(rng: Rng) -> Dust {
         Dust { rng }
     }
 
+    /// Returns true with probability `min(density_hz * dt, 1)`; `density_hz` is the mean trigger
+    /// rate in Hz, `dt` the step in seconds. `density_hz <= 0` or NaN never fires.
     #[inline(always)]
     pub fn tick(&mut self, density_hz: f32, dt: f32) -> bool {
         #[allow(clippy::neg_cmp_op_on_partial_ord, reason = "NaN density must return false; keeps exact semantics")]
@@ -31,10 +50,14 @@ pub struct Impulse {
 }
 
 impl Impulse {
+    /// Creates the trigger, primed so the first `tick` fires.
     pub fn new() -> Impulse {
         Impulse { phase: 1.0 }
     }
 
+    /// Advances by one step of `dt` seconds at rate `hz` (Hz) and returns whether it fired. Fires at
+    /// most once per call, so `hz * dt >= 1` fires every call; the period is quantised to
+    /// whole steps. `hz <= 0` stops it after the first (priming) trigger.
     #[inline(always)]
     pub fn tick(&mut self, hz: f32, dt: f32) -> bool {
         let fired = self.phase >= 1.0;
@@ -60,10 +83,13 @@ pub struct Dseq {
 }
 
 impl Dseq {
+    /// Creates a sequencer positioned at the start.
     pub fn new() -> Dseq {
         Dseq { idx: 0 }
     }
 
+    /// Returns the next element of `seq`, wrapping at the end. An empty slice gives 0. The slice
+    /// may differ between calls; the position restarts at 0 if it is past the end of the one given.
     #[inline(always)]
     pub fn next(&mut self, seq: &[i8]) -> i8 {
         if seq.is_empty() {
@@ -80,6 +106,7 @@ impl Dseq {
         v
     }
 
+    /// Restarts from the first element.
     pub fn reset(&mut self) {
         self.idx = 0;
     }
@@ -99,10 +126,12 @@ pub struct Dxrand {
 }
 
 impl Dxrand {
+    /// Creates a picker over indices `0..n`. `n <= 1` always yields 0.
     pub fn new(rng: Rng, n: usize) -> Dxrand {
         Dxrand { rng, n, last: usize::MAX }
     }
 
+    /// Returns the next index; for `n > 1` it differs from the previous result.
     #[inline(always)]
     pub fn pick(&mut self) -> usize {
         let n = self.n;
@@ -129,10 +158,12 @@ pub struct TChoose {
 }
 
 impl TChoose {
+    /// Creates the picker; `rng` supplies the random numbers.
     pub fn new(rng: Rng) -> TChoose {
         TChoose { rng }
     }
 
+    /// Returns a uniformly chosen element of `items`; an empty slice gives 0.0.
     #[inline(always)]
     pub fn pick(&mut self, items: &[f32]) -> f32 {
         if items.is_empty() {
@@ -151,10 +182,14 @@ pub struct TDelay {
 }
 
 impl TDelay {
+    /// Creates a delay of `delay_s` seconds.
     pub fn new(delay_s: f32) -> TDelay {
         TDelay { delay_s, remaining: 0.0, pending: false }
     }
 
+    /// Advances by `dt` seconds with input trigger `trig`; returns true on the step the delayed
+    /// trigger comes out. The output is at least one step after the input (even for
+    /// `delay_s` = 0), and a `trig` on the step that fires is ignored.
     #[inline(always)]
     pub fn tick(&mut self, trig: bool, dt: f32) -> bool {
         if self.pending {
