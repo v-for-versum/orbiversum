@@ -3,7 +3,7 @@
 #
 #   git tag v0.1.0 && git push origin v0.1.0
 #
-# A push to main (paths below) only builds and warms the cache; deploy runs for tags and manual runs.
+# A push to main (paths below) builds, warms the cache and deploys Pages; only tags make a Release.
 # Needs: Settings -> Pages -> Source = "GitHub Actions". The build needs the board baseline
 # `sdkconfig.jc3636k718c` to be tracked in git.
 name: site
@@ -11,8 +11,8 @@ name: site
 on:
   push:
     tags: ["v*"]
-    # A build on main only warms the cache: caches made on a tag are not visible to other
-    # tags, but every ref can read the default branch's cache. Nothing is deployed from main.
+    # A build on main also warms the cache: caches made on a tag are not visible to other
+    # tags, but every ref can read the default branch's cache.
     branches: [main]
     paths:
       - "rust/**"
@@ -99,7 +99,6 @@ jobs:
           path: tools/webflash/firmware/*.bin
 
   deploy:
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     permissions:
