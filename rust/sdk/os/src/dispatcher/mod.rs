@@ -14,6 +14,46 @@
 //! parks. `service` (UI thread, call it every UI tick) does `stop` + `start`,
 //! so every allocation and free of applet memory happens on the UI thread.
 //! `audio` takes no locks, never allocates or frees and never blocks.
+//!
+//! # Threads
+//!
+//! * UI thread: owns the [`Dispatcher`]. It calls `select` (any time) and
+//!   `service` (every UI tick). Applet `start` and `stop` run here.
+//! * Audio thread: owns the [`AudioPath`], obtained once with
+//!   `Dispatcher::take_audio` and moved into the board's render callback
+//!   (on the JC3636K718C firmware: `board.audio_out().start(sr, Box::new(move |out| path.audio(out)))`,
+//!   run by the audio task of the board's HAL). It calls `AudioPath::audio` once per block.
+//!
+//! # State machine
+//!
+//! ```text
+//!            select(i) seen by audio, fade-out done
+//!   RUNNING ------------------------------------------> PARKED
+//!      ^                                                   |
+//!      |  audio sees READY, starts fade-in                 | service(): stop old, start new,
+//!      |                                                   |            write `active`
+//!      +------------------------ READY <-------------------+
+//! ```
+//!
+//! Only the `phase` stores that hand a slot over are `Release` (and loaded
+//! with `Acquire` by the receiving side): `audio` stores `PARKED` and `service`
+//! stores `READY`. The `READY -> RUNNING` store by the audio thread is
+//! `Relaxed`, because nothing is handed over by it. `select`, `target` and
+//! `fade` are `Relaxed` too: they are plain requests, not ownership.
+//!
+//! While `PARKED` (and until `service` runs) `audio` writes silence, so a
+//! switch costs the fade-out, one or more silent blocks (until the next
+//! `service` tick) and the fade-in. A `select` that arrives while the audio
+//! path is not steady is picked up when it is: `service` reads the latest
+//! `target`, so the last request wins.
+//!
+//! # What is allowed on the audio thread
+//!
+//! `AudioPath::audio` and the `Applet::audio` it calls: no allocation, no
+//! freeing, no locks, no blocking. The only shared-memory operations are
+//! atomic loads/stores and a refcount bump of the internal `Arc`. Anything
+//! that allocates or frees applet memory belongs in `Applet::start` /
+//! `Applet::stop`, which only run on the UI thread inside `service`.
 use crate::applet::{Applet, AppletInfo};
 use crate::params::Params;
 use alloc::boxed::Box;
@@ -22,12 +62,17 @@ use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
+/// Sample rate the applets are built for and the default fade length is
+/// computed from, Hz. The firmware passes it to both the applets and the board's `AudioOut`.
 pub const DEFAULT_SAMPLE_RATE: u32 = 48_000;
-/// ~20 ms at the default sample rate.
+/// 20 ms at the default sample rate: `48_000 / 50 = 960` samples.
 const DEFAULT_FADE: usize = (DEFAULT_SAMPLE_RATE as usize) / 50;
 
+/// The audio thread owns the active slot.
 const RUNNING: u8 = 0;
+/// The audio thread gave the active slot back (applet faded out); the UI thread owns it.
 const PARKED: u8 = 1;
+/// The UI thread has started the new applet; the audio thread may take over.
 const READY: u8 = 2;
 
 struct Shared {
@@ -39,6 +84,7 @@ struct Shared {
     active: AtomicUsize,
     /// Last valid request from `select`.
     target: AtomicUsize,
+    /// Fade length in samples, for both fade-out and fade-in.
     fade: AtomicUsize,
     params: Arc<Params>,
 }
@@ -48,16 +94,25 @@ struct Shared {
 // hand-offs are Release stores / Acquire loads of `phase`.
 unsafe impl Sync for Shared {}
 
+/// UI-thread half of the dispatcher: owns the applets, requests switches and
+/// completes them in `service`. Create it with `new` or `with_params`, take the
+/// audio half once with `take_audio`.
 pub struct Dispatcher {
     shared: Arc<Shared>,
     taken: bool,
 }
 
+/// What the audio thread is doing with the current applet. The number is the
+/// count of samples of the fade already done.
 #[derive(Clone, Copy)]
 enum Mode {
+    /// Running at full level.
     Steady,
+    /// Gain ramps up from 0 to 1.
     FadeIn(usize),
+    /// Gain ramps down from 1 to 0; at the end the slot is given back (`PARKED`).
     FadeOut(usize),
+    /// Silence until the UI thread sets `READY`.
     Parked,
 }
 
@@ -69,7 +124,7 @@ pub struct AudioPath {
 }
 
 impl Dispatcher {
-    /// Starts applet 0. Panics on an empty list.
+    /// Starts applet 0 with default `Params`. Panics on an empty list.
     pub fn new(applets: Vec<Box<dyn Applet + Send>>) -> Dispatcher {
         Self::with_params(applets, Arc::new(Params::default()))
     }
@@ -140,6 +195,7 @@ impl Dispatcher {
         self.shared.slots.len()
     }
 
+    /// Always `false`: the dispatcher needs at least one applet.
     pub fn is_empty(&self) -> bool {
         false
     }
@@ -154,13 +210,23 @@ impl Dispatcher {
         self.shared.target.load(Ordering::Relaxed)
     }
 
+    /// The `Params` shared by the applets' audio and UI halves.
     pub fn params(&self) -> Arc<Params> {
         self.shared.params.clone()
     }
 }
 
 impl AudioPath {
-    /// Realtime: no locks, no allocation, no blocking. Overwrites `out`.
+    /// Renders one block into `out` (overwrites it). Realtime: no locks, no
+    /// allocation, no blocking.
+    ///
+    /// Called by the board's audio task once per block (the render callback
+    /// holds the `AudioPath`). `out` may have any length: fades are sample
+    /// accurate and span block boundaries. Steady state it just forwards to the
+    /// current applet; on a pending `select` it fades the applet out over
+    /// `fade` samples, parks, writes silence until `service` sets `READY`, then
+    /// fades the new applet in (the audio side of the hand-over described in the
+    /// module docs). On xtensa the function is placed in IRAM.
     #[cfg_attr(target_arch = "xtensa", link_section = ".iram1.audio_path")]
     pub fn audio(&mut self, out: &mut [[f32; 2]]) {
         let shared = self.shared.clone(); // refcount bump only: no allocation

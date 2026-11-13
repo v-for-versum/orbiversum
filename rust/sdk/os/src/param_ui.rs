@@ -8,7 +8,9 @@ use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::{Baseline, Text};
 use crate::{AppletInfo, AppletUi, Canvas, Dirty, InputEvent, Params};
 
+/// Lowest frequency the knob can set, Hz.
 pub const MIN_HZ: f32 = 20.0;
+/// Highest frequency the knob can set, Hz.
 pub const MAX_HZ: f32 = 2000.0;
 /// Amplitude change per tap.
 pub const AMP_STEP: f32 = 0.1;
@@ -17,6 +19,11 @@ pub(crate) const NAME_ROW: Rectangle = Rectangle::new(Point::new(60, 60), Size::
 pub(crate) const HZ_ROW: Rectangle = Rectangle::new(Point::new(60, 150), Size::new(240, 30));
 pub(crate) const AMP_ROW: Rectangle = Rectangle::new(Point::new(60, 190), Size::new(240, 30));
 
+/// UI half that edits the shared [`Params`]: a knob step is one semitone on
+/// `hz` (clamped to `MIN_HZ..=MAX_HZ`), a tap in the top half of the screen
+/// raises `amp` by `AMP_STEP` and in the bottom half lowers it (clamped to
+/// `0.0..=1.0`). It only stores into `Params`; the audio half picks the values
+/// up on its next block.
 pub struct ParamUi {
     name: &'static str,
     params: Arc<Params>,
@@ -25,6 +32,7 @@ pub struct ParamUi {
 }
 
 impl ParamUi {
+    /// A UI called `name` editing `params`.
     pub fn new(name: &'static str, params: Arc<Params>) -> ParamUi {
         ParamUi { name, params, drawn: None }
     }

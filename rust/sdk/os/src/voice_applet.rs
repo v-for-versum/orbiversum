@@ -1,4 +1,4 @@
-//! Audio half: a `orbiversum_core::voice::Voice` driven by the shared `crate::Params`.
+//! Audio half: an `orbiversum_core::voice::Voice` driven by the shared `crate::Params`.
 use alloc::sync::Arc;
 use orbiversum_core::voice::Voice;
 use crate::{Applet, AppletInfo, Params};
@@ -15,6 +15,7 @@ pub struct VoiceApplet<V: Voice> {
 }
 
 impl<V: Voice> VoiceApplet<V> {
+    /// Wraps `voice` as an applet called `name`, driven by the shared `params`.
     pub fn new(name: &'static str, voice: V, params: Arc<Params>) -> VoiceApplet<V> {
         VoiceApplet { name, voice, params }
     }
