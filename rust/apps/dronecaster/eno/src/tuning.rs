@@ -66,8 +66,8 @@ const _: () = assert!(VOICES.is_multiple_of(GROUP) && GROUP == 4, "voice i uses 
 /// Biquad Q of 1/sqrt(2): the maximally flat (Butterworth) response, no resonance peak.
 pub(crate) const Q_BUTTERWORTH: f32 = core::f32::consts::FRAC_1_SQRT_2;
 /// Size in seconds of each pad voice's delay line. The largest delay reached is
-/// (0.02 + 0.01) / 15 s = 2 ms; the 2 ms margin is about 96 samples
-/// (~384 bytes) per voice, ~3 KB for 8 voices.
+/// (0.02 + 0.01) / 15 s = 2 ms; the rest is margin. At 48 kHz `DelayL` needs 196 samples and
+/// rounds up to a power of two: 256 samples (1 KiB) per voice, ~8 KiB for 8 voices.
 pub(crate) const MAX_DELAY_S: f32 = 0.004;
 /// log2(5): the pad lowpass cutoff sweeps `hz * 2^(LOG2_5 * (lfo + 1) / 2)`, i.e. from `hz` up to
 /// `5 * hz`. A larger value opens the filter further and makes the pad brighter.
