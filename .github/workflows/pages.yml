@@ -1,0 +1,101 @@
+# Builds the firmware on a version tag, merges it into one flashable image, publishes the
+# site (landing + browser flasher) on GitHub Pages and attaches the image to a GitHub Release.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Needs: Settings -> Pages -> Source = "GitHub Actions". The build needs the board baseline
+# `sdkconfig.jc3636k718c` to be tracked in git.
+name: site
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System packages for ESP-IDF
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build python3-venv libusb-1.0-0 git
+
+      - name: Xtensa Rust toolchain
+        uses: esp-rs/xtensa-toolchain@v1.6
+        with:
+          default: false
+          ldproxy: true
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: espflash
+
+      - name: Cache ESP-IDF and cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.espressif
+            rust/boards/jc3636k718c/firmware/.embuild
+            rust/boards/jc3636k718c/firmware/target
+          key: fw-${{ runner.os }}-${{ hashFiles('rust/boards/jc3636k718c/firmware/Cargo.lock', 'rust/boards/jc3636k718c/firmware/sdkconfig.defaults', 'sdkconfig.jc3636k718c', 'dependencies.lock') }}
+
+      - name: Build firmware
+        working-directory: rust/boards/jc3636k718c/firmware
+        run: cargo build --release
+
+      - name: Merge into one image
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [ "${GITHUB_REF_TYPE}" = tag ] || version="0.0.0-${GITHUB_SHA::7}"
+          tools/webflash/merge.sh "$version"
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site/flash/firmware
+          cp site/index.html _site/index.html
+          cp tools/webflash/index.html tools/webflash/manifest.json _site/flash/
+          cp tools/webflash/firmware/orbiversum.bin _site/flash/firmware/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orbiversum-image
+          path: tools/webflash/firmware/orbiversum.bin
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: orbiversum-image
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: orbiversum.bin

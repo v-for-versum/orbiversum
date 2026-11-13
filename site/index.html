@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbiversum — drone synth for a round screen</title>
+<meta name="description" content="Orbiversum is a drone synthesizer platform for ESP32-S3 boards with a round display, written in no_std Rust.">
+<!-- Landing page. CI publishes it at the site root; the flasher (tools/webflash) goes to /flash/. -->
+<style>
+  :root { --bg:#fff; --text:#1a1a1a; --muted:#666; --panel:#f3f5f4; --line:rgba(0,0,0,.12); --accent:#0c7970; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#000; --text:#fff; --muted:rgba(255,255,255,.6); --panel:#011b1c; --line:rgba(255,255,255,.15); --accent:#71feab; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:720px; margin:0 auto; padding:64px 16px 80px; }
+  h1 { font-size:40px; line-height:1.15; font-weight:650; margin:0 0 16px; }
+  h2 { font-size:22px; margin:48px 0 12px; }
+  a { color:var(--accent); }
+  .lead { font-size:19px; color:var(--muted); margin:0 0 28px; }
+  .btn { display:inline-block; background:var(--accent); color:var(--bg); text-decoration:none;
+         border-radius:999px; padding:12px 28px; font-weight:600; }
+  .btn.ghost { background:none; color:var(--accent); border:1px solid var(--accent); margin-left:8px; }
+  .panel { background:var(--panel); border-radius:20px; padding:20px 24px; margin:16px 0; }
+  .panel h3 { margin:0 0 4px; font-size:18px; }
+  .panel p { margin:0; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; }
+  td { padding:8px 0; border-bottom:1px solid var(--line); vertical-align:top; }
+  td:first-child { padding-right:16px; white-space:nowrap; }
+  footer { margin-top:56px; color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Orbiversum</h1>
+  <p class="lead">A drone synthesizer platform for ESP32-S3 boards with a round display. Audio and UI
+  are <code>no_std</code> Rust: the same voices run on the device, in tests and in a command-line WAV renderer.</p>
+  <p><a class="btn" href="flash/">Flash your board</a><a class="btn ghost" href="https://github.com/v-for-versum/orbiversum">Source on GitHub</a></p>
+
+  <h2>What it does</h2>
+  <p>An applet menu with two drones, ported from SuperCollider drones of the Dronecaster project.</p>
+  <div class="panel"><h3>Starlids</h3>
+    <p>Twelve slowly drifting lanes of detuned saws with sweeping lowpass, a wandering delay and random panning, plus a sub pulse, through a Moog ladder filter.</p></div>
+  <div class="panel"><h3>Eno</h3>
+    <p>A slow generative “music for airports” piece: an 8-voice pad, sub sines, a Moog filter, piano-string and PolyPerc layers, a Klank resonator and reverb.</p></div>
+
+  <h2>Controls</h2>
+  <table>
+    <tr><td>Turn the knob</td><td>pitch up/down by a semitone (20–2000 Hz)</td></tr>
+    <tr><td>Tap top half</td><td>level up</td></tr>
+    <tr><td>Tap bottom half</td><td>level down</td></tr>
+    <tr><td>Hold a finger 600 ms</td><td>open the applet menu</td></tr>
+  </table>
+
+  <h2>Hardware</h2>
+  <p>Guition JC3636K718C: ESP32-S3R8, 8 MB PSRAM, 16 MB flash, 360×360 round display, touch,
+  I2S DAC (PCM5100A). Connect the DAC line output to an amplifier or headphones. The USB port is used for flashing and the serial log.</p>
+
+  <footer>MIT licensed. <a href="https://github.com/v-for-versum/orbiversum/releases">Releases</a> ·
+  <a href="https://github.com/v-for-versum/orbiversum">Source</a></footer>
+</main>
+</body>
+</html>
