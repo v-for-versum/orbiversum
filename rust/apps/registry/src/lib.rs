@@ -201,6 +201,14 @@ mod tests {
     }
 
     #[test]
+    fn every_applet_is_in_a_group() {
+        let n = all(1, 48_000.0, Arc::new(Params::default()), fake_clock).len();
+        let mut listed: Vec<usize> = groups().into_iter().flat_map(|(_, items)| items).collect();
+        listed.sort_unstable();
+        assert_eq!(listed, (0..n).collect::<Vec<_>>(), "an applet in no group is unreachable from the menu");
+    }
+
+    #[test]
     fn first_draw_is_full_then_ticks_dirty_small_rects() {
         let (_, mut ui) = eno();
         let mut s = Rec::new();
