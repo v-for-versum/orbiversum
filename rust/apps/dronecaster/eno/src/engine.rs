@@ -19,6 +19,13 @@ use crate::music::{AIRPORTS, PLANES};
 use crate::pad::{child_rng, PadVoice};
 use crate::tuning::{CTRL, GROUP, GROUPS, HPF_HZ, PIANO_MAX_DELAY_S, Q_BUTTERWORTH, REVERB_MIX, VOICES};
 
+/// The Eno drone voice: an evolving pad of chord planes with a sparse piano/PolyPerc note layer.
+///
+/// Construct with [`Eno::new`], set the pitch and level through
+/// `orbiversum_core::voice::Voice::set_params`, and render with `Voice::process`. All memory
+/// is allocated at construction (and again in `set_sample_rate`); `process` never allocates.
+/// The fields are internal state: random generators, oscillators, filters, envelopes, delay
+/// lines and the reverb.
 pub struct Eno {
     pub(crate) seed: u64,
     pub(crate) sr: f32,
@@ -110,10 +117,16 @@ pub struct Eno {
 }
 
 impl Eno {
+    /// Creates the voice for sample rate `sr` (Hz) with the given random `seed`.
+    ///
+    /// The seed fixes all random choices (LFO rates and phases, plane order, note rates and
+    /// sequences), so equal seeds render equal audio. The initial parameters are `hz` = 330 and
+    /// `amp` = 0 (silent until `set_params` is called).
     pub fn new(seed: u64, sr: f32) -> Eno {
         Eno::build(seed, sr, 330.0, 0.0)
     }
 
+    /// Builds the voice with explicit `hz` and `amp` (also used to re-create it at a new sample rate).
     pub(crate) fn build(seed: u64, sr: f32, hz: f32, amp: f32) -> Eno {
         let mut rng = Rng::new(seed);
         let dust = Dust::new(child_rng(&mut rng));

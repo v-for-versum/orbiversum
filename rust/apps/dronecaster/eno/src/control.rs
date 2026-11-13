@@ -1,3 +1,8 @@
+//! The control step: everything that changes slower than the audio rate.
+//!
+//! Runs once per `CTRL` samples (at fixed absolute sample positions). Generators advance by
+//! `CTRL` samples per call, so their rates are in Hz of real time.
+
 use orbiversum_core::{fast::{exp2, recip}, resonant::Ringz};
 
 use crate::engine::Eno;
@@ -5,6 +10,8 @@ use crate::music::{AIRPORTS, NOTE_RATES, PLANES, STRING_DECAY, TUNE_DOWN, TUNE_U
 use crate::tuning::{CTRL, KLANK_DECAY, KLANK_ENABLED, LOG2_30, PAD_CTRL_STRIDE, PIANO_LIVE_S};
 
 impl Eno {
+    /// One control step: plane trigger and pick, saw pitches, round-robin pad voice updates,
+    /// sub-sine amplitudes, Moog cutoff, Klank retuning, then the note layer.
     pub(crate) fn control(&mut self) {
         let c = CTRL as f32;
         let dt = self.dt;

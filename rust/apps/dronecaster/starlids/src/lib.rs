@@ -1,9 +1,48 @@
-//! Starlids: port of dronecaster's Starlids.scd.
+//! Starlids: port of dronecaster's `Starlids.scd` for a fixed-size, allocation-free real-time voice.
 //!
-//! Control-rate parts (slow LFOs, filter cutoffs, pan) update every
-//! `CTRL` samples at fixed absolute positions, so the output does not
-//! depend on the caller's block size.
+//! # Algorithm
+//!
+//! Twelve independent *lanes* (`LANES`) of detuned saws are summed into a stereo field:
+//!
+//! * Each lane has a band-limited saw (`SawDpw`) whose pitch is `hz * 2^((4 * o1 + 5 * o2) / 12)`.
+//!   `o1` and `o2` are integer steps (`floor(tri + 1)`) of two very slow triangle LFOs
+//!   (periods 30-100 s), so the pitch drifts in steps of 4 and 5 semitones above `hz`.
+//! * The saw goes through a lowpass (Butterworth) whose cutoff sweeps exponentially between
+//!   20 Hz and 12 kHz (`20 * 600^((lfo + 1) / 2)`, LFO period 10-30 s), then through a short
+//!   interpolated delay (about 0.7-2 ms, time wandering with smooth noise) that adds a slow
+//!   phasing, then is panned by a smoothed random position (a new target about every 3 s).
+//! * A sub pulse at `hz / 2` with a slowly changing pulse width (0.2-0.8) is added to both
+//!   channels.
+//! * The sum goes through a stereo Moog ladder whose cutoff wanders between `8 * hz` and
+//!   `60 * hz` (`hz * 8 * 7.5^((x + 1) / 2)`), then a 20 Hz highpass per channel.
+//! * Output gain is `amp / 12` per lane (the sub is scaled by 1/sqrt(2) on top).
+//!
+//! # State and parameters
+//!
+//! The state (oscillators, filters, delay lines, random generators) is allocated in
+//! [`Starlids::new`]; `process` never allocates. All random values (LFO rates, phases) are drawn
+//! once from the seed, so equal seeds render equal audio.
+//!
+//! * `hz` (Hz): base pitch, clamped to [8, 0.45 * sample rate]. Below 1 Hz, or if not finite,
+//!   the voice is silent.
+//! * `amp`: linear level 0..1 (clamped; non-finite counts as 0).
+//!
+//! Control-rate parts (slow LFOs, filter cutoffs, pan) update every `CTRL` = 32 samples at fixed
+//! absolute positions, so the output does not depend on the caller's block size. The lanes are
+//! processed in groups of four (`GROUP`) so the serial FPU chains of one lane overlap with
+//! independent lanes on the in-order core.
+//!
+//! # Tests
+//!
+//! `tests/starlids_ref.rs` compares the output (seeds 5 and 9, 110 Hz, amp 0.8, 4 s at 48 kHz)
+//! with a golden captured from the pre-optimisation implementation (libm `tanh`, 2x oversampled
+//! Moog): the level of 12 probe frequencies (Goertzel, Hann windows) within 1 dB up to 6 kHz,
+//! within 10 dB above (the ladder's stopband), the summed power above 6 kHz within 3 dB, and the
+//! RMS within 0.5 dB. It proves the real-time optimisations (no outer `tanh`, single-pass
+//! Moog, polynomial `exp2`) left the sound character intact; it is a spectral check, not a
+//! bit-exact one.
 
+#![warn(missing_docs)]
 #![no_std]
 extern crate alloc;
 
@@ -25,19 +64,26 @@ use orbiversum_core::fast::exp2 as exp2f;
 fn pow_k(log2_base: f32, e: f32) -> f32 {
     exp2f(log2_base * e)
 }
+/// log2(600): the lane lowpass cutoff is `20 * 2^(LOG2_600 * (lfo + 1) / 2)`, i.e. 20 Hz to 12 kHz.
 const LOG2_600: f32 = 9.228_819;
+/// log2(7.5): the Moog cutoff is `hz * 8 * 2^(LOG2_7_5 * (x + 1) / 2)`, i.e. `8 * hz` to `60 * hz`.
 const LOG2_7_5: f32 = 2.906_890_6;
 
+/// Control period in samples: modulation updates once per 32 frames.
 const CTRL: usize = 32;
+/// Number of detuned saw lanes; the cost of the voice scales linearly with it.
 const LANES: usize = 12;
 /// Lanes processed together in the hot loops (must divide LANES).
 const GROUP: usize = 4;
 const _: () = assert!(LANES.is_multiple_of(GROUP), "lane loops process whole groups");
 const _: () = assert!(CTRL.is_multiple_of(2) && CTRL > 0, "control segments are CTRL samples");
+/// Biquad Q of 1/sqrt(2): flat (Butterworth) response.
 const Q_BUTTERWORTH: f32 = core::f32::consts::FRAC_1_SQRT_2;
 /// Largest delay time reached: (0.02 + 0.01) / 15 s = 2 ms; margin added.
 const MAX_DELAY_S: f32 = 0.004;
 
+/// One saw lane: two step LFOs for the pitch, the saw, a lowpass with its cutoff LFO, a delay
+/// with wandering time and a smoothed random pan. Lanes share no state.
 struct Lane {
     tri1: LfTri,
     f_tri1: f32,
@@ -62,6 +108,7 @@ struct Lane {
     pan_c: f32,
 }
 
+/// Derives an independent generator from `rng` (two draws, so the parent advances by a fixed amount).
 fn child_rng(rng: &mut Rng) -> Rng {
     let hi = (rng.f32() * 16_777_216.0) as u64;
     let lo = (rng.f32() * 16_777_216.0) as u64;
@@ -101,6 +148,7 @@ impl Lane {
         }
     }
 
+    /// Control step of one lane: pitch steps, cutoff, delay time and pan gains.
     fn control(&mut self, hz: f32, max_hz: f32) {
         let c = CTRL as f32;
         let o1 = orbiversum_core::fast::floor(self.tri1.tick(self.f_tri1 * c) + 1.0);
@@ -129,6 +177,10 @@ impl Lane {
 /// LFNoise0.kr(1/3)
 const PAN_RATE: f32 = 1.0 / 3.0;
 
+/// The Starlids drone voice (twelve detuned saw lanes plus a sub pulse, see the crate docs).
+///
+/// Create with [`Starlids::new`], set `hz`/`amp` with `Voice::set_params` and render with
+/// `Voice::process`. The fields are internal state.
 pub struct Starlids {
     seed: u64,
     hz: f32,
@@ -149,10 +201,14 @@ pub struct Starlids {
 }
 
 impl Starlids {
+    /// Creates the voice for sample rate `sr` (Hz) with the given random `seed`.
+    ///
+    /// Initial parameters: `hz` = 110, `amp` = 0 (silent until `set_params` is called).
     pub fn new(seed: u64, sr: f32) -> Starlids {
         Starlids::build(seed, sr, 110.0, 0.0)
     }
 
+    /// Builds the voice with explicit `hz` and `amp` (also used to re-create it at a new sample rate).
     fn build(seed: u64, sr: f32, hz: f32, amp: f32) -> Starlids {
         let mut rng = Rng::new(seed);
         let mut lanes = Vec::with_capacity(LANES);
@@ -187,6 +243,7 @@ impl Starlids {
         s
     }
 
+    /// Control step of the whole voice: sub pulse width, every lane, Moog cutoff.
     fn control(&mut self) {
         let c = CTRL as f32;
         let t = self.sub_tri.tick(0.5 * c);

@@ -1,3 +1,5 @@
+//! One pad voice and its control-rate modulation.
+
 use orbiversum_core::{
     biquad::Biquad,
     comb::DelayL,
@@ -10,12 +12,17 @@ use orbiversum_core::{
 
 use crate::tuning::{CTRL, LOG2_5, MAX_DELAY_S, PAD_CTRL_STRIDE, PAN_RATE, Q_BUTTERWORTH};
 
+/// Derives an independent generator from `rng` (draws two values, so the parent advances by a
+/// fixed amount and the draw order stays reproducible).
 pub(crate) fn child_rng(rng: &mut Rng) -> Rng {
     let hi = (rng.f32() * 16_777_216.0) as u64;
     let lo = (rng.f32() * 16_777_216.0) as u64;
     Rng::new((hi << 24) | lo)
 }
 
+/// State of one pad voice: a lowpass whose cutoff follows a slow LFO, a short delay whose time
+/// wanders with noise, and a smoothed random pan position. The saw it filters is shared
+/// between the voices of different groups (see `GROUP`).
 pub(crate) struct PadVoice {
     pub(crate) lfo: SinOsc,
     pub(crate) f_lfo: f32,
@@ -31,6 +38,7 @@ pub(crate) struct PadVoice {
 }
 
 impl PadVoice {
+    /// Draws the voice's random LFO rates and phase from `rng`; filter and delay start neutral.
     pub(crate) fn new(rng: &mut Rng, sr: f32) -> PadVoice {
         let f_lfo = rng.range(1.0 / 30.0, 1.0 / 10.0);
         let ph = rng.f32();
