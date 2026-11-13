@@ -49,32 +49,36 @@ pub enum Glyph {
 impl Glyph {
     /// Draws the glyph inside `rect` (a `GLYPH`x`GLYPH` square); nothing leaves it.
     pub fn paint(self, d: &mut Canvas<'_>, rect: Rectangle) {
-        let mut d = d.clipped(&rect);
+        self.draw(&mut d.clipped(&rect), rect);
+    }
+
+    /// The strokes, with no clipping: they must fit in `rect` by themselves.
+    fn draw<D: DrawTarget<Color = Rgb565>>(self, d: &mut D, rect: Rectangle) {
         let o = rect.top_left;
         let p = |x: i32, y: i32| o + Point::new(x, y);
         let stroke = PrimitiveStyle::with_stroke(COLOR, 2);
         let line = |a: Point, b: Point| Line::new(a, b).into_styled(stroke);
         match self {
             Glyph::Plus => {
-                let _ = line(p(2, 8), p(13, 8)).draw(&mut d);
-                let _ = line(p(8, 2), p(8, 13)).draw(&mut d);
+                let _ = line(p(2, 8), p(13, 8)).draw(d);
+                let _ = line(p(8, 2), p(8, 13)).draw(d);
             }
             Glyph::Minus => {
-                let _ = line(p(2, 8), p(13, 8)).draw(&mut d);
+                let _ = line(p(2, 8), p(13, 8)).draw(d);
             }
             Glyph::Back => {
-                let _ = line(p(10, 2), p(4, 8)).draw(&mut d);
-                let _ = line(p(4, 8), p(10, 14)).draw(&mut d);
+                let _ = line(p(10, 2), p(4, 8)).draw(d);
+                let _ = line(p(4, 8), p(10, 14)).draw(d);
             }
             Glyph::Forward => {
-                let _ = line(p(5, 2), p(11, 8)).draw(&mut d);
-                let _ = line(p(11, 8), p(5, 14)).draw(&mut d);
+                let _ = line(p(5, 2), p(11, 8)).draw(d);
+                let _ = line(p(11, 8), p(5, 14)).draw(d);
             }
             Glyph::Knob => {
-                let _ = Arc::new(p(2, 2), 12, 30.0.deg(), 270.0.deg()).into_styled(stroke).draw(&mut d);
+                let _ = Arc::new(p(2, 2), 12, 30.0.deg(), 270.0.deg()).into_styled(stroke).draw(d);
                 let _ = Triangle::new(p(14, 5), p(13, 1), p(9, 6))
                     .into_styled(PrimitiveStyle::with_fill(COLOR))
-                    .draw(&mut d);
+                    .draw(d);
             }
         }
     }
@@ -218,6 +222,17 @@ mod tests {
             g.paint(&mut Canvas(&mut s), rect);
             assert!(!s.0.is_empty(), "{g:?} draws nothing");
             assert!(s.0.iter().all(|p| rect.contains(*p)), "{g:?} leaves its rect");
+        }
+    }
+
+    #[test]
+    fn glyph_strokes_fit_without_clipping() {
+        let rect = Rectangle::new(Point::new(100, 100), Size::new(GLYPH, GLYPH));
+        for g in [Glyph::Plus, Glyph::Minus, Glyph::Back, Glyph::Forward, Glyph::Knob] {
+            let mut s = Px(Vec::new());
+            g.draw(&mut Canvas(&mut s), rect);
+            assert!(!s.0.is_empty(), "{g:?} draws nothing");
+            assert!(s.0.iter().all(|p| rect.contains(*p)), "{g:?} strokes leave the rect: {:?}", s.0.iter().find(|p| !rect.contains(**p)));
         }
     }
 

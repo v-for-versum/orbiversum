@@ -235,6 +235,18 @@ mod tests {
     }
 
     #[test]
+    fn knob_glyph_is_inside_the_circle_and_clear_of_text_and_other_glyphs() {
+        let br = KNOB_GLYPH.bottom_right().unwrap();
+        for c in [KNOB_GLYPH.top_left, br, Point::new(br.x, KNOB_GLYPH.top_left.y), Point::new(KNOB_GLYPH.top_left.x, br.y)] {
+            assert!((c.x - 180).pow(2) + (c.y - 180).pow(2) <= 174 * 174, "corner {c:?} outside the circle");
+        }
+        assert!(KNOB_GLYPH.intersection(&TEXT_ROW).is_zero_sized(), "overlaps the value text");
+        for z in ParamUi::ZONES {
+            assert!(KNOB_GLYPH.intersection(&z.glyph_rect()).is_zero_sized(), "overlaps {:?}", z.edge);
+        }
+    }
+
+    #[test]
     fn scene_never_redraws_over_a_glyph() {
         // Glyphs are painted once, with the full repaint; this holds only while
         // no animated region reaches them.
