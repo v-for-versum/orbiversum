@@ -11,7 +11,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use dronecaster_eno::Eno;
 use dronecaster_starlids::Starlids;
-use embedded_graphics::mono_font::{ascii::FONT_6X10, MonoTextStyle};
+use embedded_graphics::mono_font::{ascii::{FONT_10X20, FONT_6X10}, MonoTextStyle};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
@@ -19,8 +19,10 @@ use embedded_graphics::text::{Alignment, Baseline, Text, TextStyleBuilder};
 use orbiversum_os::{Applet, AppletInfo, AppletUi, Canvas, Dirty, InputEvent, Params, ParamUi, VoiceApplet};
 use scene::Scene;
 
-/// Where the hz/amp line is drawn, right under the scene.
-const TEXT_ROW: Rectangle = Rectangle::new(Point::new(84, 196), Size::new(192, 14));
+/// Where the hz/amp line is drawn (10x20 font), right under the scene.
+const TEXT_ROW: Rectangle = Rectangle::new(Point::new(60, 198), Size::new(240, 26));
+/// The static "press long to exit" hint, painted with the full repaint.
+const HINT_ROW: Rectangle = Rectangle::new(Point::new(90, 240), Size::new(180, 14));
 
 /// UI half of a dronecaster voice: the animated `classic` scene with an
 /// hz/amp line under it. Input is handled like [`ParamUi`] (knob = semitones,
@@ -42,11 +44,18 @@ impl SceneUi {
     fn paint_text(&self, d: &mut Canvas<'_>) {
         let _ = TEXT_ROW.into_styled(PrimitiveStyle::with_fill(Rgb565::BLACK)).draw(d);
         let mut row = d.clipped(&TEXT_ROW);
-        let style = MonoTextStyle::new(&FONT_6X10, Rgb565::WHITE);
+        let style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
         let ts = TextStyleBuilder::new().alignment(Alignment::Center).baseline(Baseline::Top).build();
         let s = format!("hz {:.1}   amp {:.2}", self.params.hz(), self.params.amp());
-        let at = TEXT_ROW.top_left + Point::new(TEXT_ROW.size.width as i32 / 2, 2);
+        let at = TEXT_ROW.top_left + Point::new(TEXT_ROW.size.width as i32 / 2, 3);
         let _ = Text::with_text_style(&s, at, style, ts).draw(&mut row);
+    }
+
+    fn paint_hint(d: &mut Canvas<'_>) {
+        let style = MonoTextStyle::new(&FONT_6X10, Rgb565::new(16, 32, 16));
+        let ts = TextStyleBuilder::new().alignment(Alignment::Center).baseline(Baseline::Top).build();
+        let at = HINT_ROW.top_left + Point::new(HINT_ROW.size.width as i32 / 2, 2);
+        let _ = Text::with_text_style("press long to exit", at, style, ts).draw(d);
     }
 }
 
@@ -70,6 +79,7 @@ impl AppletUi for SceneUi {
                 let _ = d.clear(Rgb565::BLACK);
                 self.scene.draw_all(d);
                 self.paint_text(d);
+                Self::paint_hint(d);
                 dirty.set_full();
                 self.scene.reset();
             }
@@ -138,10 +148,11 @@ mod tests {
     struct Rec {
         min: Point,
         max: Point,
+        px: Vec<Point>,
     }
     impl Rec {
         fn new() -> Rec {
-            Rec { min: Point::new(i32::MAX, i32::MAX), max: Point::new(i32::MIN, i32::MIN) }
+            Rec { min: Point::new(i32::MAX, i32::MAX), max: Point::new(i32::MIN, i32::MIN), px: Vec::new() }
         }
         fn grow(&mut self, r: &Rectangle) {
             if let Some(br) = r.bottom_right() {
@@ -156,6 +167,7 @@ mod tests {
         }
         fn draw_pixels(&mut self, p: &mut dyn Iterator<Item = Pixel<Rgb565>>) {
             for Pixel(pt, _) in p {
+                self.px.push(pt);
                 self.grow(&Rectangle::new(pt, Size::new(1, 1)));
             }
         }
@@ -198,6 +210,16 @@ mod tests {
         assert!(g.iter().all(|(_, items)| items.iter().all(|&i| i < v.len())));
         let names: Vec<_> = g[0].1.iter().map(|&i| v[i].1.info().name).collect();
         assert_eq!(names, ["Eno", "Starlids"]);
+    }
+
+    #[test]
+    fn full_paint_shows_the_exit_hint() {
+        let (_, mut ui) = eno();
+        let mut s = Rec::new();
+        draw(&mut ui, &mut s);
+        assert!(s.px.iter().any(|p| HINT_ROW.contains(*p)), "hint text drawn in HINT_ROW");
+        assert!(s.px.iter().any(|p| TEXT_ROW.contains(*p)), "values drawn in TEXT_ROW");
+        assert!(TEXT_ROW.size.height >= 20, "values use the 10x20 font");
     }
 
     #[test]
