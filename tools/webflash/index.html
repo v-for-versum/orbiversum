@@ -3,77 +3,86 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orbiversum — flash from the browser</title>
+<title>Orbiversum — flash</title>
 <!--
-  Flash page for the Orbiversum firmware. The install button and dialog come from
-  esp-web-tools; the manifest next to this page (manifest.json) points at
-  firmware/orbiversum.bin (merged image, address 0) and update.json (app only, 0x10000).
-  Build the image with tools/webflash/merge.sh. Web Serial needs a secure context:
-  serve this folder over https or from localhost (python3 -m http.server 8787).
+  Flash page. Install buttons come from esp-web-tools. manifest.json = full image from address 0,
+  update.json = app only (0x10000). Build the images with tools/webflash/merge.sh.
+  Web Serial needs https or localhost (python3 -m http.server 8787 --directory tools/webflash).
+  Fonts are loaded from ../fonts (published by CI next to this folder); without them it falls back to Georgia.
 -->
 <style>
-  :root { --bg:#fff; --text:#1a1a1a; --muted:#666; --panel:#f3f5f4; --accent:#0c7970; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#000; --text:#fff; --muted:rgba(255,255,255,.6); --panel:#011b1c; --accent:#71feab; }
-  }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text);
-         font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  .wrap { max-width:640px; margin:0 auto; padding:48px 16px 80px; }
-  h1 { font-size:30px; font-weight:600; margin:0 0 12px; }
-  .panel { background:var(--panel); border-radius:20px; padding:24px; margin:24px 0; }
-  .meta { color:var(--muted); font-size:14px; }
-  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em; word-break:break-all; }
-  h2 { font-size:20px; margin:0 0 8px; }
-  ol { margin:8px 0; padding-left:22px; }
-  [hidden] { display:none !important; }
-  esp-web-install-button { display:block; margin:8px 0 20px; }
-  esp-web-install-button button.secondary { background:none; color:var(--accent); border:1px solid var(--accent); }
-  esp-web-install-button button { background:var(--accent); color:var(--bg); border:0; border-radius:999px;
-         padding:12px 28px; font:inherit; font-weight:600; cursor:pointer; }
+@font-face{font-family:"IM Fell English";font-style:normal;font-display:swap;src:url("../fonts/im-fell-english-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"IM Fell English";font-style:italic;font-display:swap;src:url("../fonts/im-fell-english-latin-400-italic.woff2") format("woff2")}
+@font-face{font-family:"EB Garamond";font-style:normal;font-display:swap;src:url("../fonts/eb-garamond-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"EB Garamond";font-style:italic;font-display:swap;src:url("../fonts/eb-garamond-latin-400-italic.woff2") format("woff2")}
+:root{--ink:237,237,237;--i9:rgba(var(--ink),.9);--i55:rgba(var(--ink),.55);--i3:rgba(var(--ink),.3);--i1:rgba(var(--ink),.12)}
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:var(--i9);font:19px/1.6 "EB Garamond",Georgia,serif}
+.wrap{max-width:620px;margin:0 auto;padding:56px 20px 72px;text-align:center}
+h1,h2,.ital{font-family:"IM Fell English",Georgia,serif;font-style:italic;font-weight:400}
+h1{font-size:54px;line-height:1.1;margin:8px 0 4px}
+h2{font-size:24px;margin:56px 0 4px}
+.lat{color:var(--i55);font-style:italic;margin:0}
+a{color:inherit;text-decoration-color:var(--i3);text-underline-offset:4px}
+a:hover{text-decoration-color:currentColor}
+.sigil{display:block;width:min(78vw,340px);height:auto;margin:0 auto;color:rgb(var(--ink))}
+.sigil .spin{animation:turn 240s linear infinite}
+.sigil .spin.b{animation-duration:160s;animation-direction:reverse}
+@keyframes turn{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.sigil .spin{animation:none}}
+.rule{border:0;border-top:1px solid var(--i1);margin:40px auto;width:60%}
+.btn,esp-web-install-button button{display:inline-block;background:none;color:rgb(var(--ink));border:1px solid var(--i3);border-radius:999px;
+ padding:9px 30px;font:italic 20px "IM Fell English",Georgia,serif;text-decoration:none;cursor:pointer;transition:background .2s,color .2s}
+.btn:hover,esp-web-install-button button:hover{background:rgb(var(--ink));color:#000}
+.btn.solid,esp-web-install-button button.solid{border-color:rgb(var(--ink))}
+dl{margin:12px 0;display:grid;grid-template-columns:auto 1fr;gap:6px 20px;text-align:left}
+dt{font-style:italic;color:var(--i55);text-align:right}dd{margin:0}
+footer{margin-top:64px;color:var(--i55);font-size:16px}
+[hidden]{display:none!important}
+
+h1{font-size:44px}
+.card{border:1px solid var(--i1);border-radius:24px;padding:8px 24px 24px;margin:32px 0;position:relative}
+.card::before{content:"";position:absolute;inset:4px;border:1px solid rgba(var(--ink),.06);border-radius:20px;pointer-events:none}
+.card h2{margin:20px 0 2px}
+.card p{margin:8px 0}.dim{color:var(--i55)}
+esp-web-install-button{display:block;margin:12px 0 4px}
+ol{text-align:left;display:inline-block;margin:8px 0;padding-left:22px}
 </style>
 </head>
 <body>
 <main class="wrap">
-  <h1>Orbiversum firmware</h1>
-  <p>Flash the Guition JC3636K718C (ESP32-S3) over USB straight from the browser. No toolchain needed.</p>
+<svg class="sigil" style="width:44px" viewBox="-12 -12 24 24" aria-hidden="true"><path fill="currentColor" d="M0-10 2-2 10 0 2 2 0 10-2 2-10 0-2-2Z"/></svg>
+<h1>Flash</h1>
+<p class="lat">Orbiversum for the Guition JC3636K718C · Chrome or Edge, USB</p>
 
-  <div class="panel" id="kd">
-    <h2>KirpisDonis <span class="meta">anti-brick mode</span></h2>
-    <p class="meta" id="kd-status">Checking the images…</p>
-    <div id="kd-actions" hidden>
-      <p><b>Update</b> — rewrites only the app. The bootloader and the partition table are not touched,
-      so a dropped cable cannot take away what the board boots from. Use this for every routine update.</p>
-      <esp-web-install-button manifest="update.json">
-        <button slot="activate">Update</button>
-        <span slot="unsupported">This browser has no Web Serial. Use Chrome or Edge on a desktop.</span>
-        <span slot="not-allowed">Web Serial needs https or localhost.</span>
-      </esp-web-install-button>
-      <p><b>Install</b> — writes everything from address 0, including the bootloader. Only for a fresh
-      board, a board that does not start, or when the release notes say the partition layout changed.</p>
-      <esp-web-install-button manifest="manifest.json">
-        <button slot="activate" class="secondary">Install</button>
-        <span slot="unsupported">This browser has no Web Serial.</span>
-        <span slot="not-allowed">Web Serial needs https or localhost.</span>
-      </esp-web-install-button>
-    </div>
-    <p class="meta" id="meta">Version <span id="ver">…</span>.</p>
-  </div>
+<div class="card" id="kd">
+<h2>KirpisDonis</h2>
+<p class="lat" id="kd-status">Checking the images…</p>
+<div id="kd-actions" hidden>
+<p class="dim">Update — app only. The bootloader stays untouched, so a dropped cable breaks nothing.</p>
+<esp-web-install-button manifest="update.json">
+<button slot="activate" class="solid">Update</button>
+<span slot="unsupported">No Web Serial in this browser. Use Chrome or Edge.</span>
+<span slot="not-allowed">Web Serial needs https or localhost.</span>
+</esp-web-install-button>
+<hr class="rule" style="margin:24px auto">
+<p class="dim">Install — everything from address 0. For a new or silent board.</p>
+<esp-web-install-button manifest="manifest.json">
+<button slot="activate">Install</button>
+<span slot="unsupported">No Web Serial in this browser.</span>
+<span slot="not-allowed">Web Serial needs https or localhost.</span>
+</esp-web-install-button>
+</div>
+<p class="dim" id="meta" style="font-size:16px">version <span id="ver">…</span></p>
+</div>
 
-  <div class="panel">
-    <h2>KirpisDonis recovery</h2>
-    <p>The board cannot be bricked by flashing: the ESP32-S3 download mode lives in ROM. If a write was
-    interrupted and the board is silent or reboots in a loop:</p>
-    <ol>
-      <li>Unplug USB. Hold the <b>BOOT</b> button.</li>
-      <li>Plug USB in while holding BOOT, then release it.</li>
-      <li>Press <b>Install</b> above and pick the new serial port.</li>
-    </ol>
-    <p class="meta">Do not close this tab and do not touch the cable while the dialog shows progress.</p>
-  </div>
+<div class="card">
+<h2>If the board stays silent</h2>
+<p class="dim">It cannot be bricked: download mode lives in ROM.</p>
+<ol><li>Unplug USB, hold <b>BOOT</b>.</li><li>Plug in, release.</li><li>Press <b>Install</b>.</li></ol>
+</div>
 
-  <p class="meta">Flashing is done by <a href="https://esphome.github.io/esp-web-tools/">esp-web-tools</a> 10.4.0.
-  The “Install” button replaces the whole flash contents, including saved settings.</p>
+<footer><a href="../">orbiversum</a> · <a href="https://esphome.github.io/esp-web-tools/">esp-web-tools</a></footer>
 </main>
 
 <script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>

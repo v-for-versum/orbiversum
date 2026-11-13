@@ -167,6 +167,9 @@ LodePNG, Tiny TTF, GIF, barcode, LZ4, frogfs (все — `is not set` в `sdkcon
 - **esp-web-tools 10.4.0**, лицензия Apache-2.0. Не хранится в репозитории: страница
   `tools/webflash/index.html` подключает её с `unpkg.com`. Нужна для записи
   прошивки из браузера, в прошивку не входит.
+- **IM Fell English** и **EB Garamond** (латинские начертания, woff2), лицензия SIL OFL 1.1:
+  `site/fonts/`, тексты лицензий рядом (`OFL-IM-Fell.txt`, `OFL-EB-Garamond.txt`). Взяты из проекта
+  touch2decay, оформляют лендинг и страницу прошивки. В прошивку не входят.
 - **GitHub Actions** (`actions/checkout`, `actions/cache`, `actions/upload-artifact`, все v4,
   лицензия MIT) — `.github/workflows/build.yml`. Только сборка, в выпуск не входит.
 - `docs/lfo-shapes.png` — схема формы LFO; сторонних материалов в ней нет.

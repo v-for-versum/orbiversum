@@ -87,6 +87,7 @@ jobs:
           cp site/index.html _site/index.html
           cp tools/webflash/index.html tools/webflash/manifest.json tools/webflash/update.json _site/flash/
           cp tools/webflash/firmware/*.bin _site/flash/firmware/
+          cp -r site/fonts _site/fonts
 
       - uses: actions/upload-pages-artifact@v3
         with:

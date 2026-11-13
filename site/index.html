@@ -4,61 +4,75 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Orbiversum — drone synth for a round screen</title>
-<meta name="description" content="Orbiversum is a drone synthesizer platform for ESP32-S3 boards with a round display, written in no_std Rust.">
-<!-- Landing page. CI publishes it at the site root; the flasher (tools/webflash) goes to /flash/. -->
+<meta name="description" content="Drone synthesizer for ESP32-S3 boards with a round display, in no_std Rust.">
+<!-- Landing page. CI publishes it at the site root; the flasher (tools/webflash) goes to /flash/.
+     Look: black ink on engraved star-map, after touch2decay (IM Fell English + EB Garamond, OFL). -->
 <style>
-  :root { --bg:#fff; --text:#1a1a1a; --muted:#666; --panel:#f3f5f4; --line:rgba(0,0,0,.12); --accent:#0c7970; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#000; --text:#fff; --muted:rgba(255,255,255,.6); --panel:#011b1c; --line:rgba(255,255,255,.15); --accent:#71feab; }
-  }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text);
-         font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  .wrap { max-width:720px; margin:0 auto; padding:64px 16px 80px; }
-  h1 { font-size:40px; line-height:1.15; font-weight:650; margin:0 0 16px; }
-  h2 { font-size:22px; margin:48px 0 12px; }
-  a { color:var(--accent); }
-  .lead { font-size:19px; color:var(--muted); margin:0 0 28px; }
-  .btn { display:inline-block; background:var(--accent); color:var(--bg); text-decoration:none;
-         border-radius:999px; padding:12px 28px; font-weight:600; }
-  .btn.ghost { background:none; color:var(--accent); border:1px solid var(--accent); margin-left:8px; }
-  .panel { background:var(--panel); border-radius:20px; padding:20px 24px; margin:16px 0; }
-  .panel h3 { margin:0 0 4px; font-size:18px; }
-  .panel p { margin:0; color:var(--muted); }
-  table { width:100%; border-collapse:collapse; }
-  td { padding:8px 0; border-bottom:1px solid var(--line); vertical-align:top; }
-  td:first-child { padding-right:16px; white-space:nowrap; }
-  footer { margin-top:56px; color:var(--muted); font-size:14px; }
+@font-face{font-family:"IM Fell English";font-style:normal;font-display:swap;src:url("fonts/im-fell-english-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"IM Fell English";font-style:italic;font-display:swap;src:url("fonts/im-fell-english-latin-400-italic.woff2") format("woff2")}
+@font-face{font-family:"EB Garamond";font-style:normal;font-display:swap;src:url("fonts/eb-garamond-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"EB Garamond";font-style:italic;font-display:swap;src:url("fonts/eb-garamond-latin-400-italic.woff2") format("woff2")}
+:root{--ink:237,237,237;--i9:rgba(var(--ink),.9);--i55:rgba(var(--ink),.55);--i3:rgba(var(--ink),.3);--i1:rgba(var(--ink),.12)}
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:var(--i9);font:19px/1.6 "EB Garamond",Georgia,serif}
+.wrap{max-width:620px;margin:0 auto;padding:56px 20px 72px;text-align:center}
+h1,h2,.ital{font-family:"IM Fell English",Georgia,serif;font-style:italic;font-weight:400}
+h1{font-size:54px;line-height:1.1;margin:8px 0 4px}
+h2{font-size:24px;margin:56px 0 4px}
+.lat{color:var(--i55);font-style:italic;margin:0}
+a{color:inherit;text-decoration-color:var(--i3);text-underline-offset:4px}
+a:hover{text-decoration-color:currentColor}
+.sigil{display:block;width:min(78vw,340px);height:auto;margin:0 auto;color:rgb(var(--ink))}
+.sigil .spin{animation:turn 240s linear infinite}
+.sigil .spin.b{animation-duration:160s;animation-direction:reverse}
+@keyframes turn{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.sigil .spin{animation:none}}
+.rule{border:0;border-top:1px solid var(--i1);margin:40px auto;width:60%}
+.btn,esp-web-install-button button{display:inline-block;background:none;color:rgb(var(--ink));border:1px solid var(--i3);border-radius:999px;
+ padding:9px 30px;font:italic 20px "IM Fell English",Georgia,serif;text-decoration:none;cursor:pointer;transition:background .2s,color .2s}
+.btn:hover,esp-web-install-button button:hover{background:rgb(var(--ink));color:#000}
+.btn.solid,esp-web-install-button button.solid{border-color:rgb(var(--ink))}
+dl{margin:12px 0;display:grid;grid-template-columns:auto 1fr;gap:6px 20px;text-align:left}
+dt{font-style:italic;color:var(--i55);text-align:right}dd{margin:0}
+footer{margin-top:64px;color:var(--i55);font-size:16px}
+[hidden]{display:none!important}
+
+.panel{margin:28px 0 0}.panel h3{font:italic 26px "IM Fell English",Georgia,serif;margin:0}.panel p{margin:2px 0 0;color:var(--i55)}
 </style>
 </head>
 <body>
 <main class="wrap">
-  <h1>Orbiversum</h1>
-  <p class="lead">A drone synthesizer platform for ESP32-S3 boards with a round display. Audio and UI
-  are <code>no_std</code> Rust: the same voices run on the device, in tests and in a command-line WAV renderer.</p>
-  <p><a class="btn" href="flash/">Flash your board</a><a class="btn ghost" href="https://github.com/v-for-versum/orbiversum">Source on GitHub</a></p>
+<svg class="sigil" viewBox="-190 -190 380 380" role="img" aria-label="Round screen with orbits">
+<defs><path id="s" d="M0-7 1.5-1.5 7 0 1.5 1.5 0 7-1.5 1.5-7 0-1.5-1.5Z"/></defs>
+<g fill="none" stroke="currentColor" stroke-linecap="round">
+<circle r="168" opacity=".3"/><circle r="163" opacity=".15"/>
+<g opacity=".4"><line x1="0.0" y1="-172.0" x2="0.0" y2="-180.0"/><line x1="44.5" y1="-166.1" x2="45.6" y2="-170.0"/><line x1="86.0" y1="-149.0" x2="88.0" y2="-152.4"/><line x1="121.6" y1="-121.6" x2="124.5" y2="-124.5"/><line x1="149.0" y1="-86.0" x2="152.4" y2="-88.0"/><line x1="166.1" y1="-44.5" x2="170.0" y2="-45.6"/><line x1="172.0" y1="-0.0" x2="180.0" y2="-0.0"/><line x1="166.1" y1="44.5" x2="170.0" y2="45.6"/><line x1="149.0" y1="86.0" x2="152.4" y2="88.0"/><line x1="121.6" y1="121.6" x2="124.5" y2="124.5"/><line x1="86.0" y1="149.0" x2="88.0" y2="152.4"/><line x1="44.5" y1="166.1" x2="45.6" y2="170.0"/><line x1="0.0" y1="172.0" x2="0.0" y2="180.0"/><line x1="-44.5" y1="166.1" x2="-45.6" y2="170.0"/><line x1="-86.0" y1="149.0" x2="-88.0" y2="152.4"/><line x1="-121.6" y1="121.6" x2="-124.5" y2="124.5"/><line x1="-149.0" y1="86.0" x2="-152.4" y2="88.0"/><line x1="-166.1" y1="44.5" x2="-170.0" y2="45.6"/><line x1="-172.0" y1="0.0" x2="-180.0" y2="0.0"/><line x1="-166.1" y1="-44.5" x2="-170.0" y2="-45.6"/><line x1="-149.0" y1="-86.0" x2="-152.4" y2="-88.0"/><line x1="-121.6" y1="-121.6" x2="-124.5" y2="-124.5"/><line x1="-86.0" y1="-149.0" x2="-88.0" y2="-152.4"/><line x1="-44.5" y1="-166.1" x2="-45.6" y2="-170.0"/></g>
+<g class="spin a"><circle r="132" stroke-dasharray="1 6" opacity=".55"/><use href="#s" x="45.1" y="-124.0"/><use href="#s" x="84.8" y="101.1"/><use href="#s" x="-127.5" y="34.2"/></g>
+<g class="spin b"><circle r="98" stroke-dasharray="2 5" opacity=".5"/><use href="#s" x="94.7" y="-25.4"/><use href="#s" x="-33.5" y="92.1"/><use href="#s" x="-75.1" y="-63.0"/></g>
+<circle r="62" opacity=".45"/><circle r="57" opacity=".2"/>
+</g>
+<g fill="currentColor"><use href="#s" transform="scale(2.2)"/></g>
+</svg>
+<h1>Orbiversum</h1>
+<p class="lat">Sonus perpetuus — drones for a round screen</p>
+<p style="margin-top:32px"><a class="btn solid" href="flash/">Flash the board</a></p>
 
-  <h2>What it does</h2>
-  <p>An applet menu with two drones, ported from SuperCollider drones of the Dronecaster project.</p>
-  <div class="panel"><h3>Starlids</h3>
-    <p>Twelve slowly drifting lanes of detuned saws with sweeping lowpass, a wandering delay and random panning, plus a sub pulse, through a Moog ladder filter.</p></div>
-  <div class="panel"><h3>Eno</h3>
-    <p>A slow generative “music for airports” piece: an 8-voice pad, sub sines, a Moog filter, piano-string and PolyPerc layers, a Klank resonator and reverb.</p></div>
+<hr class="rule">
+<h2>Drones</h2>
+<div class="panel"><h3>Starlids</h3><p>Twelve drifting lanes of detuned saws through a Moog ladder.</p></div>
+<div class="panel"><h3>Eno</h3><p>Generative pad, piano strings and reverb. Music for airports.</p></div>
 
-  <h2>Controls</h2>
-  <table>
-    <tr><td>Turn the knob</td><td>pitch up/down by a semitone (20–2000 Hz)</td></tr>
-    <tr><td>Tap top half</td><td>level up</td></tr>
-    <tr><td>Tap bottom half</td><td>level down</td></tr>
-    <tr><td>Hold a finger 600 ms</td><td>open the applet menu</td></tr>
-  </table>
+<h2>Legenda</h2>
+<dl>
+<dt>turn the knob</dt><dd>pitch, by semitone</dd>
+<dt>tap top / bottom</dt><dd>level up / down</dd>
+<dt>hold 0.6 s</dt><dd>applet menu</dd>
+</dl>
 
-  <h2>Hardware</h2>
-  <p>Guition JC3636K718C: ESP32-S3R8, 8 MB PSRAM, 16 MB flash, 360×360 round display, touch,
-  I2S DAC (PCM5100A). Connect the DAC line output to an amplifier or headphones. The USB port is used for flashing and the serial log.</p>
+<h2>Loca</h2>
+<p>Guition JC3636K718C — ESP32-S3, 360×360 round display, touch, I2S DAC.</p>
 
-  <footer>MIT licensed. <a href="https://github.com/v-for-versum/orbiversum/releases">Releases</a> ·
-  <a href="https://github.com/v-for-versum/orbiversum">Source</a></footer>
+<footer><a href="https://github.com/v-for-versum/orbiversum">source</a> · <a href="https://github.com/v-for-versum/orbiversum/releases">releases</a> · MIT</footer>
 </main>
 </body>
 </html>
