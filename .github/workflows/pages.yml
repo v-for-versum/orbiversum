@@ -3,6 +3,7 @@
 #
 #   git tag v0.1.0 && git push origin v0.1.0
 #
+# A push to main (paths below) only builds and warms the cache; deploy runs for tags and manual runs.
 # Needs: Settings -> Pages -> Source = "GitHub Actions". The build needs the board baseline
 # `sdkconfig.jc3636k718c` to be tracked in git.
 name: site
@@ -10,6 +11,16 @@ name: site
 on:
   push:
     tags: ["v*"]
+    # A build on main only warms the cache: caches made on a tag are not visible to other
+    # tags, but every ref can read the default branch's cache. Nothing is deployed from main.
+    branches: [main]
+    paths:
+      - "rust/**"
+      - "components/**"
+      - "sdkconfig*"
+      - "dependencies.lock"
+      - "tools/webflash/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 concurrency:
@@ -37,8 +48,9 @@ jobs:
         with:
           tool: espflash
 
-      - name: Cache ESP-IDF and cargo
-        uses: actions/cache@v4
+      - name: Restore cache (ESP-IDF, cargo)
+        id: cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
@@ -50,6 +62,18 @@ jobs:
       - name: Build firmware
         working-directory: rust/boards/jc3636k718c/firmware
         run: cargo build --release
+
+      # Save even when a later step fails, so a retry does not download everything again.
+      - name: Save cache
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.espressif
+            rust/boards/jc3636k718c/firmware/.embuild
+            rust/boards/jc3636k718c/firmware/target
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
       - name: Merge into one image
         run: |
@@ -74,6 +98,7 @@ jobs:
           path: tools/webflash/firmware/*.bin
 
   deploy:
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     permissions:
