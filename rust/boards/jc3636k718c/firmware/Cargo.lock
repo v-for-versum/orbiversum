@@ -365,6 +365,7 @@ dependencies = [
 name = "dronecaster-eno"
 version = "0.1.0"
 dependencies = [
+ "libm",
  "orbiversum-core",
 ]
 

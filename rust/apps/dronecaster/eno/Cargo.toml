@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 orbiversum-core = { path = "../../../sdk/core" }
+libm = "0.2"
 
 [lints]
 workspace = true

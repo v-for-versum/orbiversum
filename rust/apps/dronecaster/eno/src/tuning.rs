@@ -20,9 +20,18 @@
 /// independent of the caller's block size. A smaller value makes modulation smoother and costs
 /// more CPU in the `control` section; a larger one is cheaper but steppier.
 pub(crate) const CTRL: usize = 32;
-/// Output trim, a linear gain applied together with `amp`: the layers peak at ~1.56 at amp 1,
-/// which the i16 conversion would hard-clip.
-pub(crate) const OUT_TRIM: f32 = 0.6;
+/// Output trim, a linear gain applied together with `amp`, for `hz` up to `OUT_TRIM_KNEE_HZ`.
+/// Rendered peaks at amp 1 and trim 1 (`render-wav`, 6 seeds x 150 s): 0.44-0.55 at 40-55 Hz,
+/// 0.69-0.87 from 80 to 600 Hz, 0.92 at 880 Hz, 0.96 at 1320 Hz, 1.23 at 2000 Hz. Trim 1 puts the
+/// worst peak below the i16 hard clip up to the knee; above it the trim falls as
+/// `(knee / hz)^OUT_TRIM_SLOPE`. The original `Eno.scd` has no trim and clips at amp 1 (RMS about
+/// -10..-14 dBFS at 370-600 Hz); this port keeps ~0.9 peak instead. Re-measure (several `--hz` and
+/// `--seed`) after changing any layer gain.
+pub(crate) const OUT_TRIM: f32 = 1.0;
+/// Pitch in Hz above which the trim starts to fall.
+pub(crate) const OUT_TRIM_KNEE_HZ: f32 = 1000.0;
+/// Exponent of the trim's fall above the knee (0 = constant trim).
+pub(crate) const OUT_TRIM_SLOPE: f32 = 0.4;
 /// CPU-budget switch (flipped by hand after a measurement): reverb on the mono sum with the same
 /// wet on both channels. Note: the current `ReverbLite` has no mono tick, so this saves no CPU
 /// until it gets one. When `true` the stereo image of the reverb tail collapses to mono.

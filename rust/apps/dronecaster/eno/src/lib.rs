@@ -32,7 +32,7 @@
 //! 7. `P_FINAL`: lowpass at `8 * hz`, highpass at `HPF_HZ`, and the intro fade-in.
 //! 8. `P_REVERB`: a stereo `ReverbLite` (Freeverb: per channel 4 combs and 2 allpasses, i.e.
 //!    "4+2", room 2.0 clamped to 1.0, damping 0.5, dry/wet `REVERB_MIX`), then the output gain
-//!    `amp * OUT_TRIM`.
+//!    `amp * trim` (`OUT_TRIM`, lower above `OUT_TRIM_KNEE_HZ`).
 //!
 //! The `P_*` constants index the profiler sections of `orbiversum_core::prof`; [`ENO_NAMES`]
 //! gives their names.

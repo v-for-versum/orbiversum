@@ -33,6 +33,12 @@ pub struct Eno {
     pub(crate) dt: f32,
     pub(crate) hz: f32,
     pub(crate) amp: f32,
+    /// diagnostics: only the piano layer (weight 0.3), as in the original with the layer mix pinned
+    pub(crate) solo_piano: bool,
+    /// diagnostics: bypass the reverb
+    pub(crate) dry: bool,
+    /// output trim for the current `hz` (see `tuning::OUT_TRIM`)
+    pub(crate) trim: f32,
     pub(crate) silent: bool,
     pub(crate) sub_f_hz: [f32; 2],
     /// raw `hz` input bits the derived values belong to
@@ -153,6 +159,9 @@ impl Eno {
             dt: CTRL as f32 / sr,
             hz: 330.0,
             amp: 0.0,
+            solo_piano: false,
+            dry: false,
+            trim: 0.0,
             silent: false,
             sub_f_hz: [82.5, 165.0],
             hz_key: f32::NAN.to_bits(),
@@ -228,6 +237,14 @@ impl Eno {
         prof::note_addr(2, s.scratch.as_ptr().cast());
         prof::note_addr(3, s.combs[0].buf_ptr());
         s
+    }
+
+    /// Diagnostics for `render-wav`: `solo_piano` keeps only the piano layer (fixed weight 0.3, no
+    /// pad, Klank or PolyPerc); `dry` bypasses the reverb. Not used by the firmware.
+    #[doc(hidden)]
+    pub fn set_debug(&mut self, solo_piano: bool, dry: bool) {
+        self.solo_piano = solo_piano;
+        self.dry = dry;
     }
 
     /// Current plane semitone offsets (diagnostics and tests).

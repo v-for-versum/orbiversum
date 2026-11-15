@@ -78,11 +78,14 @@ impl Eno {
             self.seq_idx = self.seq_pick.pick();
             self.dseq.reset();
         }
+        if self.solo_piano {
+            self.noterate = 0.25;
+        }
         self.note_trig = self.notepulse.tick(self.noterate, dt);
         self.piano_live = self.piano_live.saturating_sub(1);
         if self.note_trig {
             self.piano_live = (PIANO_LIVE_S * self.sr / CTRL as f32) as u32;
-            self.seqnote = self.dseq.next(AIRPORTS[self.seq_idx]);
+            self.seqnote = if self.solo_piano { 0 } else { self.dseq.next(AIRPORTS[self.seq_idx]) };
             self.perc_env.trigger();
         }
         let sn = self.seqnote as f32;
@@ -108,5 +111,9 @@ impl Eno {
         let w = 0.5 + 0.4 * self.mix_lfo.tick(rate * c);
         self.piano_g = 0.3 * (1.0 - w);
         self.perc_g = w;
+        if self.solo_piano {
+            self.piano_g = 0.3;
+            self.perc_g = 0.0;
+        }
     }
 }
