@@ -19,7 +19,8 @@ use crate::fast;
 
 /// SC Decay2: `Decay(x, decay) - Decay(x, attack)`, each a one-pole `y = x + coef * y_prev`.
 ///
-/// With `coef = exp(-1 / (sr * t))` for a time `t > 0` and `coef = 0` for `t <= 0`
+/// With `coef = exp(ln(0.001) / (sr * t))` (as SC: `t` is the time to -60 dB, not the e-folding
+/// time) for a time `t > 0` and `coef = 0` for `t <= 0`
 /// (that branch is then a plain copy of `x`). Fed with an impulse, the output rises over
 /// `attack_s` and falls over `decay_s`. The gain is not normalised.
 pub struct Decay2 {
@@ -31,9 +32,10 @@ pub struct Decay2 {
 
 impl Decay2 {
     /// Creates the envelope for sample rate `sr` (Hz) with `attack_s` and `decay_s` in seconds
-    /// (the time constants of the two one-poles; `<= 0` disables that pole).
+    /// (the times to -60 dB of the two one-poles; `<= 0` disables that pole).
     pub fn new(sr: f32, attack_s: f32, decay_s: f32) -> Decay2 {
-        let coef = |t: f32| if t > 0.0 { libm::expf(-1.0 / (sr * t)) } else { 0.0 };
+        // -60 dB in `t` seconds, like SC's `Decay`/`Decay2` (`log001 = ln 0.001`)
+        let coef = |t: f32| if t > 0.0 { libm::expf(-6.907_755 / (sr * t)) } else { 0.0 };
         Decay2 { ca: coef(attack_s), cd: coef(decay_s), ya: 0.0, yd: 0.0 }
     }
 
