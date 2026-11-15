@@ -5,8 +5,8 @@
 //! Audio rate. State: 12 `f32` buffers (per channel 4 combs + 2 allpasses) and one
 //! damping value per comb, all allocated in [`ReverbLite::new`]; `tick` never allocates.
 //! The reference delay lengths are 1116, 1277, 1422, 1557 (combs) and 556, 341 (allpasses)
-//! samples at 44.1 kHz, scaled linearly to the actual `sr` (minimum 2 samples); both channels
-//! use the same lengths. Parameters are fixed at construction. Cost class: moderate (about 12
+//! samples at 44.1 kHz, scaled linearly to the actual `sr` (minimum 2 samples); the right channel's are
+//! 23 samples (at 44.1 kHz) longer (Freeverb's stereo spread). Parameters are fixed at construction. Cost class: moderate (about 12
 //! buffer reads and writes and a few multiply-adds per channel per sample).
 //!
 //! ```
@@ -28,6 +28,9 @@ const COMB_LEN: [usize; 4] = [1116, 1277, 1422, 1557];
 const AP_LEN: [usize; 2] = [556, 341];
 const FIXED_GAIN: f32 = 0.015;
 const AP_FB: f32 = 0.5;
+/// Freeverb's stereo spread: the right channel's delays are this many samples (at 44.1 kHz)
+/// longer, so the two tails decorrelate and the tail has width.
+const STEREO_SPREAD: usize = 23;
 
 fn scaled(n: usize, sr: f32) -> usize {
     let r = (n as f32 * sr * (1.0 / 44100.0) + 0.5) as usize;
@@ -93,15 +96,16 @@ struct Channel {
 }
 
 impl Channel {
-    fn new(sr: f32) -> Channel {
+    fn new(sr: f32, spread: usize) -> Channel {
+        let l = |n: usize| scaled(n + spread, sr);
         Channel {
             combs: [
-                Comb::new(scaled(COMB_LEN[0], sr)),
-                Comb::new(scaled(COMB_LEN[1], sr)),
-                Comb::new(scaled(COMB_LEN[2], sr)),
-                Comb::new(scaled(COMB_LEN[3], sr)),
+                Comb::new(l(COMB_LEN[0])),
+                Comb::new(l(COMB_LEN[1])),
+                Comb::new(l(COMB_LEN[2])),
+                Comb::new(l(COMB_LEN[3])),
             ],
-            aps: [Allpass::new(scaled(AP_LEN[0], sr)), Allpass::new(scaled(AP_LEN[1], sr))],
+            aps: [Allpass::new(l(AP_LEN[0])), Allpass::new(l(AP_LEN[1]))],
         }
     }
 
@@ -148,7 +152,7 @@ impl ReverbLite {
         let damp = if damp.is_nan() { 0.0 } else { damp.clamp(0.0, 1.0) };
         let mix = if mix.is_nan() { 0.0 } else { mix.clamp(0.0, 1.0) };
         let d1 = damp * 0.4;
-        ReverbLite { ch: [Channel::new(sr), Channel::new(sr)], mix, fb: room * 0.28 + 0.7, d1, d2: 1.0 - d1 }
+        ReverbLite { ch: [Channel::new(sr, 0), Channel::new(sr, STEREO_SPREAD)], mix, fb: room * 0.28 + 0.7, d1, d2: 1.0 - d1 }
     }
 
     /// Start address of the first delay buffer (for memory-placement diagnostics).
