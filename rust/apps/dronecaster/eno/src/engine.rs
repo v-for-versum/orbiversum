@@ -9,7 +9,7 @@ use orbiversum_core::{
     noise::{Noise2, PinkNoise},
     osc::{Pulse, SawDpw, SinOsc},
     resonant::{RLpf, Ringz},
-    reverb::ReverbLite,
+    reverb_fdn::ReverbFdn,
     rng::Rng,
     seq::{Dseq, Dust, Dxrand, Impulse, TChoose, TDelay},
     voice::Voice,
@@ -113,7 +113,7 @@ pub struct Eno {
     // final chain
     pub(crate) out_lpf: [Biquad; 2],
     pub(crate) out_hpf: [Biquad; 2],
-    pub(crate) reverb: ReverbLite,
+    pub(crate) reverb: ReverbFdn,
     pub(crate) intro_pos: u32,
     // layer mix
     pub(crate) mix_noise: Noise0,
@@ -224,7 +224,7 @@ impl Eno {
             klank_hz: f32::NAN,
             out_lpf: [Biquad::lowpass(sr, 1000.0, Q_BUTTERWORTH), Biquad::lowpass(sr, 1000.0, Q_BUTTERWORTH)],
             out_hpf: [Biquad::highpass(sr, HPF_HZ, Q_BUTTERWORTH), Biquad::highpass(sr, HPF_HZ, Q_BUTTERWORTH)],
-            reverb: ReverbLite::new(sr, REVERB_MIX, 2.0, 0.5),
+            reverb: ReverbFdn::new(sr, REVERB_MIX, 2.0, 0.5),
             intro_pos: 0,
             mix_noise,
             mix_lfo: SinOsc::new(sr, 0.0),

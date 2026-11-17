@@ -33,7 +33,7 @@ pub(crate) const OUT_TRIM_KNEE_HZ: f32 = 1000.0;
 /// Exponent of the trim's fall above the knee (0 = constant trim).
 pub(crate) const OUT_TRIM_SLOPE: f32 = 0.4;
 /// CPU-budget switch (flipped by hand after a measurement): reverb on the mono sum with the same
-/// wet on both channels. Note: the current `ReverbLite` has no mono tick, so this saves no CPU
+/// wet on both channels. Note: the current `ReverbFdn` has no mono tick, so this saves no CPU
 /// until it gets one. When `true` the stereo image of the reverb tail collapses to mono.
 pub(crate) const REVERB_SINGLE_CHANNEL: bool = false;
 /// CPU-budget switch: `false` removes the Klank layer (four resonators per channel, `klank`
