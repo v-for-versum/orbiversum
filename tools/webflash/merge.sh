@@ -3,7 +3,7 @@
 #
 # Берёт готовый ELF и bootloader/partition-table из target/ (после `cargo build --release`
 # в rust/boards/jc3636k718c/firmware), собирает один образ с адреса 0 и обновляет
-# manifest.json (полная установка) и update.json (KirpisDonis: только приложение).
+# manifest.json (полная установка) и update.json (только приложение).
 #
 #   tools/webflash/merge.sh [версия]      # версия по умолчанию — из Cargo.toml
 #
@@ -32,7 +32,7 @@ espflash save-image --chip esp32s3 --merge --skip-padding \
   --bootloader "$rel/bootloader.bin" --partition-table "$rel/partition-table.bin" \
   "$rel/$bin" "$out"
 
-# KirpisDonis: отдельный образ только приложения (с 0x10000). «Update» пишет его и не трогает
+# Отдельный образ только приложения (с 0x10000). «Update» пишет его и не трогает
 # загрузчик и таблицу разделов, так что обрыв записи не ломает то, с чего плата стартует.
 app_offset=65536
 app="$root/tools/webflash/firmware/orbiversum-app.bin"
@@ -57,6 +57,6 @@ def write(manifest, image, offset, name):
     print(f"{manifest}: {image} {len(data)} байт, sha256 {m['image']['sha256']}")
 
 write("manifest.json", "firmware/orbiversum.bin", 0, "Orbiversum")
-write("update.json", "firmware/orbiversum-app.bin", app_offset, "Orbiversum (KirpisDonis update)")
+write("update.json", "firmware/orbiversum-app.bin", app_offset, "Orbiversum (app update)")
 PY
 echo "версия $version"

@@ -24,7 +24,7 @@ python3 -m http.server 8787 --directory tools/webflash   # http://localhost:8787
 Web Serial works only over https or on localhost (Chrome/Edge), so the page can be published
 as-is on GitHub Pages together with `manifest.json` and `firmware/`.
 
-## KirpisDonis (anti-brick)
+## Image check (anti-brick)
 
 - **Update** writes only the app at 0x10000; the bootloader and the partition table stay intact, so an
   interrupted write cannot remove what the board boots from. **Install** writes from 0 and is for a fresh or
