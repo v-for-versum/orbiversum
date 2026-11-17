@@ -23,6 +23,7 @@ accesses; **high** = many dependent operations with saturators.
 | `comb` | `DelayL` (linear delay), `CombL` (feedback comb) | audio | low |
 | `delay` | `DelayC` (cubic delay) | audio | low |
 | `reverb` | `ReverbLite` (Freeverb: 4 combs + 2 allpasses per channel) | audio | medium |
+| `reverb_fdn` | `ReverbFdn` (8-line Hadamard FDN, 2 input allpasses per channel, stereo) | audio | medium |
 | `env` | `Decay2` (audio), `EnvPerc` (control, SC `Env.perc`) | audio / control | low |
 | `lfo` | `Noise0`, `Noise1`, `VarLagSine` | slow modulators | low |
 | `noise` | `Noise2` (LFNoise2), `PinkNoise` (Kellet) | audio | low |

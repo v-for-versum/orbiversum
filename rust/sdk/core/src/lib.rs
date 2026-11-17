@@ -8,7 +8,7 @@
 //!
 //! * Sample rates `sr` are in Hz, times are in seconds, frequencies in Hz, gains linear.
 //! * Allocation happens only in constructors of the blocks that own a buffer
-//!   ([`delay::DelayC`], [`comb::DelayL`], [`comb::CombL`], [`reverb::ReverbLite`]);
+//!   ([`delay::DelayC`], [`comb::DelayL`], [`comb::CombL`], [`reverb::ReverbLite`], [`reverb_fdn::ReverbFdn`]);
 //!   `tick` never allocates.
 //! * Blocks that name an SC (SuperCollider) UGen say so; they follow that UGen's
 //!   behaviour in the way described in their own docs, not bit for bit.
@@ -29,6 +29,7 @@
 //! | [`comb`] | `DelayL` (linear delay), `CombL` | audio |
 //! | [`delay`] | `DelayC` (cubic delay) | audio |
 //! | [`reverb`] | `ReverbLite` (Freeverb) | audio |
+//! | [`reverb_fdn`] | `ReverbFdn` (8-line Hadamard FDN) | audio |
 //! | [`mod@env`] | `Decay2` (audio), `EnvPerc` (control) | mixed |
 //! | [`lfo`] | `Noise0`, `Noise1`, `VarLagSine` | slow modulators, `hz / sr` per call |
 //! | [`noise`] | `Noise2`, `PinkNoise` | audio |
@@ -55,6 +56,7 @@ pub mod pan;
 pub mod prof;
 pub mod resonant;
 pub mod reverb;
+pub mod reverb_fdn;
 pub mod rng;
 pub mod seq;
 pub mod voice;

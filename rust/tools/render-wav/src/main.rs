@@ -15,6 +15,8 @@ struct Args {
     seconds: f32,
     seed: u64,
     out: String,
+    solo_piano: bool,
+    dry: bool,
 }
 
 fn parse() -> Result<Args, String> {
@@ -25,9 +27,22 @@ fn parse() -> Result<Args, String> {
         seconds: 10.0,
         seed: 1,
         out: String::new(),
+        solo_piano: false,
+        dry: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
+        match flag.as_str() {
+            "--solo-piano" => {
+                a.solo_piano = true;
+                continue;
+            }
+            "--dry" => {
+                a.dry = true;
+                continue;
+            }
+            _ => {}
+        }
         let v = it.next().ok_or(format!("missing value for {flag}"))?;
         let bad = |e: &dyn std::fmt::Display| format!("{flag}: {e}");
         match flag.as_str() {
@@ -50,7 +65,11 @@ fn run(a: Args) -> Result<f32, String> {
     let sr = SR as f32;
     let mut voice: Box<dyn Voice> = match a.drone.as_str() {
         "starlids" => Box::new(Starlids::new(a.seed, sr)),
-        "eno" => Box::new(Eno::new(a.seed, sr)),
+        "eno" => {
+            let mut e = Eno::new(a.seed, sr);
+            e.set_debug(a.solo_piano, a.dry);
+            Box::new(e)
+        }
         other => return Err(format!("unknown drone {other} (starlids|eno)")),
     };
     voice.set_sample_rate(sr);

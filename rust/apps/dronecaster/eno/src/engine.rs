@@ -9,7 +9,7 @@ use orbiversum_core::{
     noise::{Noise2, PinkNoise},
     osc::{Pulse, SawDpw, SinOsc},
     resonant::{RLpf, Ringz},
-    reverb::ReverbLite,
+    reverb_fdn::ReverbFdn,
     rng::Rng,
     seq::{Dseq, Dust, Dxrand, Impulse, TChoose, TDelay},
     voice::Voice,
@@ -33,6 +33,12 @@ pub struct Eno {
     pub(crate) dt: f32,
     pub(crate) hz: f32,
     pub(crate) amp: f32,
+    /// diagnostics: only the piano layer (weight 0.3), as in the original with the layer mix pinned
+    pub(crate) solo_piano: bool,
+    /// diagnostics: bypass the reverb
+    pub(crate) dry: bool,
+    /// output trim for the current `hz` (see `tuning::OUT_TRIM`)
+    pub(crate) trim: f32,
     pub(crate) silent: bool,
     pub(crate) sub_f_hz: [f32; 2],
     /// raw `hz` input bits the derived values belong to
@@ -107,7 +113,7 @@ pub struct Eno {
     // final chain
     pub(crate) out_lpf: [Biquad; 2],
     pub(crate) out_hpf: [Biquad; 2],
-    pub(crate) reverb: ReverbLite,
+    pub(crate) reverb: ReverbFdn,
     pub(crate) intro_pos: u32,
     // layer mix
     pub(crate) mix_noise: Noise0,
@@ -153,6 +159,9 @@ impl Eno {
             dt: CTRL as f32 / sr,
             hz: 330.0,
             amp: 0.0,
+            solo_piano: false,
+            dry: false,
+            trim: 0.0,
             silent: false,
             sub_f_hz: [82.5, 165.0],
             hz_key: f32::NAN.to_bits(),
@@ -215,7 +224,7 @@ impl Eno {
             klank_hz: f32::NAN,
             out_lpf: [Biquad::lowpass(sr, 1000.0, Q_BUTTERWORTH), Biquad::lowpass(sr, 1000.0, Q_BUTTERWORTH)],
             out_hpf: [Biquad::highpass(sr, HPF_HZ, Q_BUTTERWORTH), Biquad::highpass(sr, HPF_HZ, Q_BUTTERWORTH)],
-            reverb: ReverbLite::new(sr, REVERB_MIX, 2.0, 0.5),
+            reverb: ReverbFdn::new(sr, REVERB_MIX, 2.0, 0.5),
             intro_pos: 0,
             mix_noise,
             mix_lfo: SinOsc::new(sr, 0.0),
@@ -228,6 +237,14 @@ impl Eno {
         prof::note_addr(2, s.scratch.as_ptr().cast());
         prof::note_addr(3, s.combs[0].buf_ptr());
         s
+    }
+
+    /// Diagnostics for `render-wav`: `solo_piano` keeps only the piano layer (fixed weight 0.3, no
+    /// pad, Klank or PolyPerc); `dry` bypasses the reverb. Not used by the firmware.
+    #[doc(hidden)]
+    pub fn set_debug(&mut self, solo_piano: bool, dry: bool) {
+        self.solo_piano = solo_piano;
+        self.dry = dry;
     }
 
     /// Current plane semitone offsets (diagnostics and tests).

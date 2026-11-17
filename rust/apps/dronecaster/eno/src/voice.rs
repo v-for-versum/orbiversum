@@ -3,11 +3,13 @@ use orbiversum_core::voice::Voice;
 
 use crate::engine::Eno;
 use crate::profile::{ENO_NAMES, P_CONTROL, P_FINAL, P_KLANK, P_MOOG, P_PAD, P_PERC, P_PIANO, P_REVERB};
-use crate::tuning::{CTRL, GROUP, INTRO_DELAY_S, INTRO_RAMP_S, KLANK_ENABLED, KLANK_EXCITE, KLANK_GAIN, OUT_TRIM, REVERB_MIX, REVERB_SINGLE_CHANNEL};
+use crate::tuning::{CTRL, GROUP, INTRO_DELAY_S, INTRO_RAMP_S, KLANK_ENABLED, KLANK_EXCITE, KLANK_GAIN, OUT_TRIM, OUT_TRIM_KNEE_HZ, OUT_TRIM_SLOPE, REVERB_MIX, REVERB_SINGLE_CHANNEL};
 
 impl Voice for Eno {
     fn set_sample_rate(&mut self, sr: f32) {
+        let (solo_piano, dry) = (self.solo_piano, self.dry);
         *self = Eno::build(self.seed, sr, self.hz, self.amp);
+        self.set_debug(solo_piano, dry);
     }
 
     fn set_params(&mut self, hz: f32, amp: f32) {
@@ -20,6 +22,7 @@ impl Voice for Eno {
             // hz < 1 (or non-finite) means silence
             self.silent = h < 1.0;
             self.sub_f_hz = [self.hz * 0.25, self.hz * 0.5];
+            self.trim = OUT_TRIM * libm::powf(OUT_TRIM_KNEE_HZ / self.hz.max(OUT_TRIM_KNEE_HZ), OUT_TRIM_SLOPE);
             let lp = (self.hz * 8.0).min(self.max_hz);
             for f in self.out_lpf.iter_mut() {
                 f.set_lowpass(lp);
@@ -34,7 +37,7 @@ impl Voice for Eno {
     #[allow(clippy::needless_range_loop, reason = "indexed lane loops keep the proven codegen of the realtime path")]
     fn process(&mut self, out: &mut [[f32; 2]]) {
         prof::set_names(&ENO_NAMES);
-        let amp = self.amp * OUT_TRIM;
+        let amp = self.amp * self.trim;
         let mut pb = prof::Block::start();
         let mut i = 0;
         while i < out.len() {
@@ -102,6 +105,10 @@ impl Voice for Eno {
                     r[j] += kr * KLANK_GAIN;
                 }
             }
+            if self.solo_piano {
+                l = [0.0; CTRL];
+                r = [0.0; CTRL];
+            }
             pb.mark(P_KLANK);
             // piano: noise burst -> two tuned combs -> RLPF -> HPF
             let mut nm = [0.0f32; CTRL];
@@ -153,7 +160,9 @@ impl Voice for Eno {
             }
             pb.mark(P_FINAL);
             for (j, o) in out[i..i + n].iter_mut().enumerate() {
-                if REVERB_SINGLE_CHANNEL {
+                if self.dry {
+                    *o = [l[j] * amp, r[j] * amp];
+                } else if REVERB_SINGLE_CHANNEL {
                     let m = (l[j] + r[j]) * 0.5;
                     let dry = m * (1.0 - REVERB_MIX);
                     let wet = self.reverb.tick(m, m)[0] - dry;
